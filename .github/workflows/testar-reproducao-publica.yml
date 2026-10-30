@@ -1,0 +1,39 @@
+name: Verificar episódios públicos no NovelPlay
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/testar-reproducao-publica.yml'
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Conferir links públicos e negar episódios pagos
+        run: |
+          python3 - <<'PY'
+          import urllib.request, urllib.error, json
+          base='https://novelplay-api.onrender.com/api/v1/reelshort'
+          book_id='6a7963bafe0db909320bca6e'
+          slug='dimahkotai-darah-perak'
+          url=f'{base}/episodes/{book_id}?filtered_title={slug}'
+          with urllib.request.urlopen(url,timeout=40) as response:
+              episodes=json.load(response)['episodes']
+          free=[e for e in episodes if e.get('free')]
+          paid=[e for e in episodes if not e.get('free')]
+          print('TOTAL_EPISODES:',len(episodes),'FREE:',len(free),'LOCKED:',len(paid))
+          assert free, 'Nenhum episódio público identificado'
+          assert paid, 'A lista de episódios pagos não foi detectada'
+          def video(e):
+              return f'{base}/video/{book_id}/{e["episode"]}?filtered_title={slug}&chapter_id={e["chapter_id"]}'
+          with urllib.request.urlopen(video(free[0]),timeout=40) as response:
+              output=json.load(response)
+              assert output.get('video_url','').startswith('https://')
+              print('FREE_VIDEO_STATUS:',response.status,'LINK_HTTPS:',bool(output.get('video_url')))
+          try:
+              urllib.request.urlopen(video(paid[0]),timeout=40)
+          except urllib.error.HTTPError as err:
+              print('PAID_VIDEO_STATUS:',err.code)
+              assert err.code==403, 'Episódio pago precisa estar protegido'
+          else:
+              raise AssertionError('Episódio pago foi liberado incorretamente')
+          PY
