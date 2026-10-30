@@ -28,3 +28,18 @@ nem contorne controles de acesso ou proteção dos vídeos.
 
 Abra a aba Actions e execute **Gerar NovelPlay v3 (APK)**. Após sucesso,
 baixe o artefato `NovelPlay-v3-APK` e extraia `app-release.apk`.
+
+## Catálogo ReelShort (fonte comunitária opcional)
+
+Referência: https://github.com/wanglinsaputra/Rest-Api-ReelShort (MIT).
+O proxy expõe `/recommended` e `/episodes/{book_id}` sob
+`/api/v1/reelshort`. Este adaptador lê somente títulos, capas e a
+numeração dos episódios. **Não consulta `/video` nem incorpora links HLS de
+conteúdo protegido.** É preciso obter autorização da plataforma/detentores dos
+direitos para disponibilizar os vídeos em outro aplicativo.
+
+Configure `REELSHORT_API_URL` como variável do GitHub Actions com a URL
+completa do prefixo do proxy, por exemplo `https://SEU-SERVIDOR/api/v1/reelshort`.
+O proxy não é hospedado por este projeto. Não existe URL pública confirmada,
+e a fonte pode parar de funcionar com alterações no site ReelShort.
+A interface mostra erro e catálogo de demonstração quando não há serviço.
