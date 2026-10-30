@@ -28,12 +28,21 @@ function send(res,status,body){
     'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'});
   res.end(JSON.stringify(body));
 }
-const getList=data=>Array.isArray(data)?data:
-  Array.isArray(data?.results)?data.results:
-  Array.isArray(data?.episodes)?data.episodes:
-  Array.isArray(data?.data)?data.data:
-  Array.isArray(data?.data?.results)?data.data.results:
-  Array.isArray(data?.data?.episodes)?data.data.episodes:[];
+const getList=data=>{
+  if(Array.isArray(data))return data;
+  for(const key of ['results','episodes','dramas','items','list','data','result']){
+    const nested=data?.[key];
+    if(Array.isArray(nested))return nested;
+    if(nested&&typeof nested==='object'&&nested!==data){
+      const result=getList(nested);
+      if(result.length)return result;
+    }
+  }
+  if(Array.isArray(data?.sections)){
+    return data.sections.flatMap(section=>getList(section));
+  }
+  return [];
+};
 export function normalizeSearch(data){
   return getList(data).map(x=>({
     id:String(x.id??x.book_id??x.code??''),
@@ -41,6 +50,7 @@ export function normalizeSearch(data){
     cover:String(x.cover??x.book_pic??''),
     genre:String(x.genre??''),
     synopsis:String(x.synopsis??x.description??''),
+    episodes:Number(x.episodes??x.episodeCount??x.chapter_count??0),
   })).filter(x=>x.id&&x.title).slice(0,100);
 }
 export function normalizeEpisodes(data){
@@ -55,7 +65,14 @@ export function normalizeEpisodes(data){
 }
 const allowedId=id=>/^[a-zA-Z0-9_:-]{1,128}$/.test(id);
 function providerPath(slug,kind,query){
-  const value=encodeURIComponent(query);
+  const value=encodeURIComponent(query||'');
+  if(kind==='home'){
+    // Official DramaBos GitHub README lists provider-specific feed routes.
+    if(slug==='flickreels')return '/flickreels/api/flickreels/trending?lang=en';
+    if(slug==='dramabox')return '/dramabox/api/v1/discover';
+    if(slug==='reelshort')return '/reelshort/api/v1/featured';
+    return '/'+slug+'/api/v1/home';
+  }
   if(kind==='search') {
     if(slug==='flickreels')return '/flickreels/api/flickreels/search?q='+value;
     return '/'+slug+'/api/v1/search?'+
@@ -74,14 +91,27 @@ async function upstream(path){
   try{
     response=await fetch(new URL(path,'https://dramabos.live'),{
       redirect:'error',signal:AbortSignal.timeout(12000),
-      headers:{Authorization:'Bearer '+process.env.DRAMABOS_API_KEY.trim(),
-        Accept:'application/json'},
+      headers:{
+        Accept:'application/json',
+        ...(configured() ? {Authorization:'Bearer '+process.env.DRAMABOS_API_KEY.trim()} : {}),
+      },
     });
   }catch{throw {status:502,message:'Não foi possível contatar a DramaBos'};}
-  if(!response.ok)throw {
-    status:[401,403,429].includes(response.status)?response.status:502,
-    message:'DramaBos respondeu HTTP '+response.status,
-  };
+  if(!response.ok){
+    const status=response.status;
+    throw {
+      status:[401,403,429].includes(status)?status:502,
+      message:status===401
+        ?'A DramaBos exige autenticação. Configure uma chave válida no Render.'
+        :status===403
+        ?'A DramaBos bloqueou o acesso (HTTP 403). Verifique as permissões da chave ou o acesso do servidor.'
+        :status===404
+        ?'A DramaBos respondeu HTTP 404: esta rota não está disponível no servidor, embora esteja anunciada na documentação.'
+        :status===429
+        ?'Limite de requisições da DramaBos atingido.'
+        :'DramaBos respondeu HTTP '+status,
+    };
+  }
   let value;
   try{value=await response.json();}
   catch{throw {status:502,message:'Resposta JSON inválida da DramaBos'};}
@@ -96,13 +126,15 @@ export async function handleDramaBos(url,req,res){
     send(res,200,{providers,configured:configured(),mode:'metadata'});
     return true;
   }
-  if(!configured()){
-    send(res,503,{error:'Configure DRAMABOS_API_KEY no Render para carregar títulos'});
+  if(path==='/api/dramabos/status'){
+    send(res,200,{configured:configured(),providers:providers.length,
+      mode:'metadata',authentication:'optional-experiment'});
     return true;
   }
   const search=path.match(/^\/api\/dramabos\/search\/([a-z0-9]+)$/);
   const eps=path.match(/^\/api\/dramabos\/episodes\/([a-z0-9]+)\/([^/]+)$/);
-  const slug=search?.[1]??eps?.[1]??'';
+  const home=path.match(/^\/api\/dramabos\/home\/([a-z0-9]+)$/);
+  const slug=search?.[1]??eps?.[1]??home?.[1]??'';
   if(!slugs.has(slug)){
     send(res,404,{error:'Provedor ou rota não reconhecidos'});return true;
   }
@@ -113,10 +145,10 @@ export async function handleDramaBos(url,req,res){
     send(res,400,{error:'Parâmetros inválidos'});return true;
   }
   try{
-    const body=await upstream(providerPath(slug,search?'search':'episodes',
-      search?keyword:id));
-    send(res,200,search?{provider:slug,results:normalizeSearch(body)}:
-      {provider:slug,episodes:normalizeEpisodes(body)});
+    const kind=search?'search':eps?'episodes':'home';
+    const body=await upstream(providerPath(slug,kind,search?keyword:id));
+    send(res,200,eps?{provider:slug,episodes:normalizeEpisodes(body)}:
+      {provider:slug,results:normalizeSearch(body)});
   }catch(e){
     send(res,e.status??502,{error:e.message??'Erro na API'});
   }
