@@ -30,3 +30,16 @@ jobs:
           if [ "$status" != "200" ]; then
             echo "::warning::Servidor online, mas catálogo não está disponível (HTTP $status)"
           fi
+
+      - name: Verificar diretório DramaBos de 42 provedores
+        run: |
+          curl --fail --show-error --silent --max-time 40 --retry 2 --retry-delay 2 \
+            https://novelplay-api.onrender.com/api/dramabos/providers -o /tmp/providers.json
+          python3 - <<'PY'
+          import json
+          j=json.load(open('/tmp/providers.json'))
+          names=j.get('providers',[])
+          assert len(names)==42, 'Diretório DramaBos incompleto'
+          assert len({p['slug'] for p in names})==42
+          print('PROVEDORES:',len(names),'CHAVE_CONFIGURADA:',j.get('configured'))
+          PY
