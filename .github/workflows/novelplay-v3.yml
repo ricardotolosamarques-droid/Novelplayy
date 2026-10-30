@@ -1,0 +1,53 @@
+name: Gerar NovelPlay v3 (APK)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'novelplay_v3/**'
+      - '.github/workflows/novelplay-v3.yml'
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Gerar estrutura Android
+        working-directory: novelplay_v3
+        run: flutter create --project-name novelplay_app --platforms android .
+      - name: Permitir acesso à internet
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('novelplay_v3/android/app/src/main/AndroidManifest.xml')
+          s=p.read_text()
+          if 'android.permission.INTERNET' not in s:
+              s=s.replace('<application','<uses-permission android:name="android.permission.INTERNET" />\n    <application',1)
+              p.write_text(s)
+          PY
+      - name: Instalar pacotes
+        working-directory: novelplay_v3
+        run: flutter pub get
+      - name: Compilar APK
+        working-directory: novelplay_v3
+        env:
+          CATALOG_URL: ${{ vars.CATALOG_URL }}
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+          API_INDEX_PATH: ${{ vars.API_INDEX_PATH }}
+          API_INFO_PATH: ${{ vars.API_INFO_PATH }}
+          API_INFO_ID_PARAM: ${{ vars.API_INFO_ID_PARAM }}
+        run: |
+          args=("--dart-define=CATALOG_URL=$CATALOG_URL" "--dart-define=API_BASE_URL=$API_BASE_URL")
+          if [[ -n "$API_INDEX_PATH" ]]; then args+=("--dart-define=API_INDEX_PATH=$API_INDEX_PATH"); fi
+          if [[ -n "$API_INFO_PATH" ]]; then args+=("--dart-define=API_INFO_PATH=$API_INFO_PATH"); fi
+          if [[ -n "$API_INFO_ID_PARAM" ]]; then args+=("--dart-define=API_INFO_ID_PARAM=$API_INFO_ID_PARAM"); fi
+          flutter build apk --release "${args[@]}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NovelPlay-v3-APK
+          path: novelplay_v3/build/app/outputs/flutter-apk/app-release.apk
