@@ -1,0 +1,28 @@
+name: Testar API DramaBos
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/diagnostico-dramabos.yml']
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verificar respostas públicas
+        run: |
+          python3 - <<'PY'
+          import urllib.request, urllib.error, json
+          paths=[
+             '/api/status',
+             '/dramabox/api/v1/search?keyword=love',
+             '/reelshort/api/v1/search?q=love',
+          ]
+          for p in paths:
+              req=urllib.request.Request('https://dramabos.live'+p,headers={'Accept':'application/json'})
+              try:
+                  with urllib.request.urlopen(req,timeout=15) as resp:
+                      print(p,resp.status,resp.headers.get('Content-Type',''),resp.read(200).decode('utf-8','replace'))
+              except urllib.error.HTTPError as e:
+                  print(p,e.code,e.headers.get('Content-Type',''),e.read(200).decode('utf-8','replace'))
+              except Exception as e:
+                  print(p,type(e).__name__,str(e)[:120])
+          PY
