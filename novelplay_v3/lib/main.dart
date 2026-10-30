@@ -18,7 +18,48 @@ class NovelPlay extends StatelessWidget {
           brightness: Brightness.dark,
           colorSchemeSeed: const Color(0xffdc467b),
         ),
-        home: const DramaBosHome(),
+        home: const NovelPlayTabs(),
+      );
+}
+
+// The requested DramaBos directory remains the default screen.
+// The existing ReelShort API is an optional fallback while the third-party
+// DramaBos endpoint returns HTTP 403 or 404.
+class NovelPlayTabs extends StatefulWidget {
+  const NovelPlayTabs({super.key});
+
+  @override
+  State<NovelPlayTabs> createState() => _NovelPlayTabsState();
+}
+
+class _NovelPlayTabsState extends State<NovelPlayTabs> {
+  int selected = 0;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        body: IndexedStack(
+          index: selected,
+          children: const [
+            DramaBosHome(),
+            Home(),
+          ],
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: selected,
+          onDestinationSelected: (index) => setState(() {
+            selected = index;
+          }),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.apps),
+              label: 'DramaBos (42)',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.play_circle_outline),
+              label: 'ReelShort',
+            ),
+          ],
+        ),
       );
 }
 
