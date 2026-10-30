@@ -4,258 +4,254 @@ import 'package:http/http.dart' as http;
 
 class Episode {
   final int number;
-  final String title, videoUrl;
-  Episode(this.number, this.title, this.videoUrl);
-  factory Episode.parse(Map<String,dynamic> j) {
-    final number = int.tryParse('${j['number'] ?? j['episodeNumber'] ?? j['episode_index'] ?? 1}') ?? 1;
-    return Episode(number,'${j['title'] ?? j['name'] ?? 'Episódio $number'}',
-      '${j['videoUrl'] ?? j['playUrl'] ?? j['video_url'] ?? j['show_collection_play_url'] ?? ''}');
+  final String title;
+  final String videoUrl;
+
+  const Episode(this.number, this.title, this.videoUrl);
+
+  factory Episode.fromJson(Map<String, dynamic> value) {
+    final number = int.tryParse((value['number'] ??
+        value['episodeNumber'] ?? value['episode_index'] ?? 1).toString()) ?? 1;
+    return Episode(number,
+        (value['title'] ?? value['name'] ?? 'Episódio $number').toString(),
+        (value['videoUrl'] ?? value['playUrl'] ??
+            value['video_url'] ?? '').toString());
   }
 }
+
 class Novel {
-  final String id,title,synopsis,genre,cover;
+  final String id;
+  final String title;
+  final String synopsis;
+  final String genre;
+  final String cover;
   final List<Episode> episodes;
   final String slug;
-  Novel(this.id,this.title,this.synopsis,this.genre,this.cover,this.episodes,{this.slug = ''});
-  factory Novel.parse(Map<String,dynamic> j) {
-    final values = j['episodes'] ?? j['episode_list'] ?? j['play_list'] ?? [];
-    return Novel('${j['id'] ?? j['show_collection_id'] ?? j['playlet_id'] ?? ''}',
-      '${j['title'] ?? j['name'] ?? j['playlet_name'] ?? 'Sem título'}',
-      '${j['synopsis'] ?? j['description'] ?? j['intro'] ?? ''}',
-      '${j['genre'] ?? j['category'] ?? ''}',
-      '${j['cover'] ?? j['poster'] ?? j['cover_url'] ?? ''}',
-      values is List ? values.whereType<Map>().map((x)=>Episode.parse(Map<String,dynamic>.from(x))).toList() : [],
-      slug: '${j['filtered_title'] ?? ''}');
+  final bool fromReelShort;
+
+  const Novel(this.id, this.title, this.synopsis, this.genre,
+      this.cover, this.episodes,
+      {this.slug = '', this.fromReelShort = false});
+
+  factory Novel.fromJson(Map<String, dynamic> value) {
+    final source = value['episodes'] ?? value['episode_list'] ?? [];
+    final episodes = source is List
+        ? source.whereType<Map>().map((item) =>
+            Episode.fromJson(Map<String, dynamic>.from(item))).toList()
+        : <Episode>[];
+    return Novel(
+      (value['id'] ?? value['show_collection_id'] ?? '').toString(),
+      (value['title'] ?? value['name'] ?? 'Sem título').toString(),
+      (value['synopsis'] ?? value['description'] ?? '').toString(),
+      (value['genre'] ?? value['category'] ?? '').toString(),
+      (value['cover'] ?? value['poster'] ?? '').toString(),
+      episodes,
+    );
+  }
+
+  factory Novel.fromReelShortBook(Map<String, dynamic> book) {
+    return Novel(
+      (book['book_id'] ?? '').toString(),
+      (book['book_title'] ?? 'Sem título').toString(),
+      (book['special_desc'] ?? '').toString(),
+      'ReelShort',
+      (book['book_pic'] ?? '').toString(),
+      const [],
+      slug: (book['filtered_title'] ?? '').toString(),
+      fromReelShort: true,
+    );
   }
 }
+
 class Catalog {
   final List<Novel> novels;
   final String origin;
   final String? warning;
-  Catalog(this.novels,this.origin,[this.warning]);
+  const Catalog(this.novels, this.origin, [this.warning]);
 }
-class Sources {
-  static const catalogUrl=String.fromEnvironment('CATALOG_URL');
-  static const apiUrl=String.fromEnvironment('API_BASE_URL');
-  // Optional community proxy, configured by the owner. Metadata only.
-  // No subscription circumvention or third-party video playback.
-  static const reelshortApi=String.fromEnvironment('REELSHORT_API_URL');
-  static const apiIndexPath=String.fromEnvironment('API_INDEX_PATH',defaultValue:'/api/playlet/index_recommend');
-  static const apiInfoPath=String.fromEnvironment('API_INFO_PATH',defaultValue:'/api/playlet/info');
-  static const apiIdParam=String.fromEnvironment('API_INFO_ID_PARAM',defaultValue:'id');
 
-  static Uri? valid(String raw) {
-    final u=Uri.tryParse(raw.trim());
-    return (u != null && u.scheme == 'https' && u.host.isNotEmpty && u.userInfo.isEmpty) ? u : null;
+class Sources {
+  static String reelshortApiUrl =
+      const String.fromEnvironment('REELSHORT_API_URL');
+  static const String catalogUrl =
+      String.fromEnvironment('CATALOG_URL');
+  static const String apiBaseUrl =
+      String.fromEnvironment('API_BASE_URL');
+  static const String apiIndexPath =
+      String.fromEnvironment('API_INDEX_PATH',
+          defaultValue: '/api/playlet/index_recommend');
+  static const String apiInfoPath =
+      String.fromEnvironment('API_INFO_PATH',
+          defaultValue: '/api/playlet/info');
+
+  static Uri? valid(String input) {
+    final uri = Uri.tryParse(input.trim());
+    if (uri == null || uri.scheme != 'https' ||
+        uri.host.isEmpty || uri.userInfo.isNotEmpty) {
+      return null;
+    }
+    return uri;
   }
-  static Uri? endpoint(String path) {
-    final base=valid(apiUrl);
-    if(base==null || !path.startsWith('/') || path.startsWith('//')) return null;
-    return base.replace(path:path,query:null,fragment:null);
+
+  static Uri? proxyEndpoint(String suffix) {
+    final base = valid(reelshortApiUrl);
+    if (base == null || !suffix.startsWith('/')) return null;
+    final path = base.path.replaceFirst(RegExp(r'/$'), '') + suffix;
+    return base.replace(path: path, query: null, fragment: null);
   }
-  static Future<dynamic> get(Uri uri) async {
-    final res=await http.get(uri,headers:const {'Accept':'application/json'}).timeout(const Duration(seconds:12));
-    if(res.statusCode!=200) throw Exception('HTTP ${res.statusCode}');
-    return jsonDecode(utf8.decode(res.bodyBytes));
+
+  static Uri? genericEndpoint(String suffix) {
+    final base = valid(apiBaseUrl);
+    if (base == null || !suffix.startsWith('/') ||
+        suffix.startsWith('//')) return null;
+    return base.replace(path: suffix, query: null, fragment: null);
   }
-  static List<dynamic>? pickList(dynamic node,[int depth=0]) {
-    if(depth>5) return null;
-    if(node is List) return node;
-    if(node is Map) {
-      for(final key in ['novels','playlets','data','result','list','items','rows','records','recommend_list','video_list']) {
-        if(node.containsKey(key)) {
-          final list=pickList(node[key],depth+1);
-          if(list!=null) return list;
+
+  static Future<dynamic> request(Uri uri) async {
+    final response = await http.get(uri, headers: const {
+      'Accept': 'application/json',
+    }).timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      throw Exception('API respondeu HTTP ' + response.statusCode.toString());
+    }
+    return jsonDecode(utf8.decode(response.bodyBytes));
+  }
+
+  static List<dynamic>? findList(dynamic node, [int depth = 0]) {
+    if (depth > 5) return null;
+    if (node is List) return node;
+    if (node is Map) {
+      for (final key in const [
+        'novels','playlets','data','result','list','items',
+        'rows','records','recommend_list','video_list'
+      ]) {
+        if (node.containsKey(key)) {
+          final list = findList(node[key], depth + 1);
+          if (list != null) return list;
         }
       }
     }
     return null;
   }
-  static List<Novel> parseList(dynamic node) {
-    final list=pickList(node);
-    if(list==null) throw const FormatException('JSON sem lista de novelinhas');
-    return list.whereType<Map>().map((x)=>Novel.parse(Map<String,dynamic>.from(x)))
-      .where((n)=>n.title!='Sem título').toList();
+
+  static List<Novel> parseGeneric(dynamic data) {
+    final entries = findList(data);
+    if (entries == null) {
+      throw const FormatException('JSON não contém lista de novelinhas');
+    }
+    return entries
+        .whereType<Map>()
+        .map((entry) => Novel.fromJson(Map<String, dynamic>.from(entry)))
+        .where((n) => n.title != 'Sem título')
+        .toList();
   }
-  static Future<Catalog> load() async {
-    if(valid(reelshortApi)!=null) {
+
+  static Future<Catalog> demo([String? warning]) async {
+    final raw = await rootBundle.loadString('assets/catalog.json');
+    return Catalog(parseGeneric(jsonDecode(raw)), 'Demonstração', warning);
+  }
+
+  static Future<Catalog> load({
+    String shelf = 'recommended',
+    String query = '',
+  }) async {
+    if (valid(reelshortApiUrl) != null) {
       try {
-        final base=reelshortApi.replaceFirst(RegExp(r'/
-    if(online!=null) {
-      try {
-        final novels=parseList(await get(online));
-        if(novels.isEmpty) throw const FormatException('Catálogo vazio');
-        return Catalog(novels,'Catálogo remoto');
-      } catch(e) {
-        return Catalog(parseList(jsonDecode(await rootBundle.loadString('assets/catalog.json'))),
-          'Demonstração','A API falhou: $e');
+        final term = query.trim();
+        final allowedShelf = const ['recommended','newrelease','dramadub']
+                .contains(shelf) ? shelf : 'recommended';
+        final uri = proxyEndpoint(term.isNotEmpty ? '/search' : '/'+allowedShelf);
+        if (uri == null) {
+          throw const FormatException('Endereço da API inválido');
+        }
+        final endpoint = term.isNotEmpty
+            ? uri.replace(queryParameters: {'keywords': term})
+            : uri;
+        final body = await request(endpoint);
+        if (body is! Map) {
+          throw const FormatException('Resposta inesperada da API');
+        }
+        final entries = term.isNotEmpty ? body['results'] : body['books'];
+        if (entries is! List) {
+          throw const FormatException('API não retornou lista de títulos');
+        }
+        final titles = entries
+            .whereType<Map>()
+            .map((item) =>
+                Novel.fromReelShortBook(Map<String, dynamic>.from(item)))
+            .where((n) => n.id.isNotEmpty && n.slug.isNotEmpty)
+            .toList();
+        return Catalog(titles,
+            'Catálogo ReelShort (API comunitária)',
+            'Catálogo informativo. Vídeos do ReelShort não estão integrados.');
+      } catch (error) {
+        return demo('Falha na conexão com a API ReelShort: $error');
       }
     }
-    return Catalog(parseList(jsonDecode(await rootBundle.loadString('assets/catalog.json'))),
-      'Demonstração','API não configurada. As novelinhas do Vanta Surf NÃO estão conectadas.');
+
+    final uri = valid(catalogUrl) ?? genericEndpoint(apiIndexPath);
+    if (uri != null) {
+      try {
+        return Catalog(parseGeneric(await request(uri)), 'Catálogo autorizado');
+      } catch (error) {
+        return demo('Erro ao carregar o catálogo: $error');
+      }
+    }
+    return demo(
+      'Sem API configurada: a demonstração não contém novelinhas reais.');
   }
-  static Future<Novel> details(Novel n) async {
-    if(n.episodes.isNotEmpty || n.id.isEmpty) return n;
-    if(valid(reelshortApi)!=null && n.slug.isNotEmpty) {
-      final base=reelshortApi.replaceFirst(RegExp(r'/
-    if(uri==null || !RegExp(r'^[a-zA-Z_][a-zA-Z_0-9]*$').hasMatch(apiIdParam)) return n;
-    final result=await get(uri.replace(queryParameters:{apiIdParam:n.id}));
-    dynamic value=result;
-    for(int i=0;i<5 && value is Map;i++) {
-      if(value['episodes'] is List || value['episode_list'] is List || value['play_list'] is List) {
-        final parsed=Novel.parse(Map<String,dynamic>.from(value));
-        return Novel(n.id,n.title,n.synopsis,n.genre,n.cover,parsed.episodes);
+
+  static Future<Novel> details(Novel novel) async {
+    if (novel.episodes.isNotEmpty || novel.id.isEmpty) return novel;
+    if (novel.fromReelShort) {
+      final uri = proxyEndpoint('/episodes/' + Uri.encodeComponent(novel.id));
+      if (uri == null) {
+        throw const FormatException('Configure a API ReelShort nas opções');
+      }
+      final response = await request(uri.replace(queryParameters: {
+        'filtered_title': novel.slug,
+      }));
+      if (response is! Map || response['episodes'] is! List) {
+        throw const FormatException('Episódios não encontrados na resposta');
+      }
+      final episodes = <Episode>[];
+      for (final item in response['episodes'] as List) {
+        if (item is! Map) continue;
+        final number = int.tryParse((item['episode'] ?? '').toString());
+        if (number != null) {
+          episodes.add(Episode(number, 'Episódio $number', ''));
+        }
+      }
+      return Novel(novel.id, novel.title, novel.synopsis, novel.genre,
+          novel.cover, episodes,
+          slug: novel.slug, fromReelShort: true);
+    }
+
+    final uri = genericEndpoint(apiInfoPath);
+    if (uri == null) return novel;
+    final response = await request(
+        uri.replace(queryParameters: {'id': novel.id}));
+    dynamic node = response;
+    for (var i = 0; i < 5; i++) {
+      if (node is! Map) break;
+      if (node['episodes'] is List || node['episode_list'] is List) {
+        final items = node['episodes'] ?? node['episode_list'];
+        final episodes = (items as List).whereType<Map>().map(
+          (item) => Episode.fromJson(Map<String, dynamic>.from(item)),
+        ).toList();
+        return Novel(novel.id, novel.title, novel.synopsis,
+            novel.genre, novel.cover, episodes);
       }
       dynamic next;
-      for(final key in ['data','result','info','playlet','detail']) {
-        if(value[key] is Map) { next=value[key]; break; }
+      for (final key in const ['data','result','info','playlet','detail']) {
+        if (node[key] is Map) {
+          next = node[key];
+          break;
+        }
       }
-      if(next==null) break;
-      value=next;
+      if (next == null) break;
+      node = next;
     }
-    throw const FormatException('API não retornou episódios reconhecíveis');
-  }
-}
-), '');
-        final u=valid('$base/recommended');
-        if(u==null) throw const FormatException('Invalid ReelShort proxy URL');
-        final raw=await get(u);
-        if(raw is! Map || raw['books'] is! List) throw const FormatException('Invalid ReelShort catalog');
-        final novels=(raw['books'] as List).whereType<Map>().map((b){
-          final j=Map<String,dynamic>.from(b);
-          return Novel(
-            '${j['book_id'] ?? ''}', '${j['book_title'] ?? 'Sem título'}',
-            '${j['special_desc'] ?? ''}', 'ReelShort', '${j['book_pic'] ?? ''}', [],
-            slug:'${j['filtered_title'] ?? ''}');
-        }).where((n)=>n.id.isNotEmpty && n.slug.isNotEmpty).toList();
-        if(novels.isEmpty) throw const FormatException('Empty ReelShort bookshelf');
-        return Catalog(novels,'ReelShort — catálogo comunitário',
-          'Dados de um projeto não oficial. Reprodução de vídeos não integrada.');
-      }catch(e){
-        return Catalog(parseList(jsonDecode(await rootBundle.loadString('assets/catalog.json'))),
-          'Demonstração','Não foi possível carregar o catálogo ReelShort: $e');
-      }
-    }
-    final online=valid(catalogUrl) ?? endpoint(apiIndexPath);
-    if(online!=null) {
-      try {
-        final novels=parseList(await get(online));
-        if(novels.isEmpty) throw const FormatException('Catálogo vazio');
-        return Catalog(novels,'Catálogo remoto');
-      } catch(e) {
-        return Catalog(parseList(jsonDecode(await rootBundle.loadString('assets/catalog.json'))),
-          'Demonstração','A API falhou: $e');
-      }
-    }
-    return Catalog(parseList(jsonDecode(await rootBundle.loadString('assets/catalog.json'))),
-      'Demonstração','API não configurada. As novelinhas do Vanta Surf NÃO estão conectadas.');
-  }
-  static Future<Novel> details(Novel n) async {
-    if(n.episodes.isNotEmpty || n.id.isEmpty) return n;
-    final uri=endpoint(apiInfoPath);
-    if(uri==null || !RegExp(r'^[a-zA-Z_][a-zA-Z_0-9]*$').hasMatch(apiIdParam)) return n;
-    final result=await get(uri.replace(queryParameters:{apiIdParam:n.id}));
-    dynamic value=result;
-    for(int i=0;i<5 && value is Map;i++) {
-      if(value['episodes'] is List || value['episode_list'] is List || value['play_list'] is List) {
-        final parsed=Novel.parse(Map<String,dynamic>.from(value));
-        return Novel(n.id,n.title,n.synopsis,n.genre,n.cover,parsed.episodes);
-      }
-      dynamic next;
-      for(final key in ['data','result','info','playlet','detail']) {
-        if(value[key] is Map) { next=value[key]; break; }
-      }
-      if(next==null) break;
-      value=next;
-    }
-    throw const FormatException('API não retornou episódios reconhecíveis');
-  }
-}
-), '');
-      final root=valid('$base/episodes/${Uri.encodeComponent(n.id)}');
-      if(root==null) throw const FormatException('Invalid ReelShort API URL');
-      final decoded=await get(root.replace(queryParameters:{'filtered_title':n.slug}));
-      if(decoded is! Map || decoded['episodes'] is! List) {
-        throw const FormatException('Episode list not returned by proxy');
-      }
-      final episodes=(decoded['episodes'] as List).whereType<Map>().map((e) {
-        final number=int.tryParse('${e['episode'] ?? ''}');
-        if(number==null) return null;
-        return Episode(number,'Episódio $number','');
-      }).whereType<Episode>().toList();
-      return Novel(n.id,n.title,n.synopsis,n.genre,n.cover,episodes,slug:n.slug);
-    }
-    final uri=endpoint(apiInfoPath);
-    if(uri==null || !RegExp(r'^[a-zA-Z_][a-zA-Z_0-9]*$').hasMatch(apiIdParam)) return n;
-    final result=await get(uri.replace(queryParameters:{apiIdParam:n.id}));
-    dynamic value=result;
-    for(int i=0;i<5 && value is Map;i++) {
-      if(value['episodes'] is List || value['episode_list'] is List || value['play_list'] is List) {
-        final parsed=Novel.parse(Map<String,dynamic>.from(value));
-        return Novel(n.id,n.title,n.synopsis,n.genre,n.cover,parsed.episodes);
-      }
-      dynamic next;
-      for(final key in ['data','result','info','playlet','detail']) {
-        if(value[key] is Map) { next=value[key]; break; }
-      }
-      if(next==null) break;
-      value=next;
-    }
-    throw const FormatException('API não retornou episódios reconhecíveis');
-  }
-}
-), '');
-        final u=valid('$base/recommended');
-        if(u==null) throw const FormatException('Invalid ReelShort proxy URL');
-        final raw=await get(u);
-        if(raw is! Map || raw['books'] is! List) throw const FormatException('Invalid ReelShort catalog');
-        final novels=(raw['books'] as List).whereType<Map>().map((b){
-          final j=Map<String,dynamic>.from(b);
-          return Novel(
-            '${j['book_id'] ?? ''}', '${j['book_title'] ?? 'Sem título'}',
-            '${j['special_desc'] ?? ''}', 'ReelShort', '${j['book_pic'] ?? ''}', [],
-            slug:'${j['filtered_title'] ?? ''}');
-        }).where((n)=>n.id.isNotEmpty && n.slug.isNotEmpty).toList();
-        if(novels.isEmpty) throw const FormatException('Empty ReelShort bookshelf');
-        return Catalog(novels,'ReelShort — catálogo comunitário',
-          'Dados de um projeto não oficial. Reprodução de vídeos não integrada.');
-      }catch(e){
-        return Catalog(parseList(jsonDecode(await rootBundle.loadString('assets/catalog.json'))),
-          'Demonstração','Não foi possível carregar o catálogo ReelShort: $e');
-      }
-    }
-    final online=valid(catalogUrl) ?? endpoint(apiIndexPath);
-    if(online!=null) {
-      try {
-        final novels=parseList(await get(online));
-        if(novels.isEmpty) throw const FormatException('Catálogo vazio');
-        return Catalog(novels,'Catálogo remoto');
-      } catch(e) {
-        return Catalog(parseList(jsonDecode(await rootBundle.loadString('assets/catalog.json'))),
-          'Demonstração','A API falhou: $e');
-      }
-    }
-    return Catalog(parseList(jsonDecode(await rootBundle.loadString('assets/catalog.json'))),
-      'Demonstração','API não configurada. As novelinhas do Vanta Surf NÃO estão conectadas.');
-  }
-  static Future<Novel> details(Novel n) async {
-    if(n.episodes.isNotEmpty || n.id.isEmpty) return n;
-    final uri=endpoint(apiInfoPath);
-    if(uri==null || !RegExp(r'^[a-zA-Z_][a-zA-Z_0-9]*$').hasMatch(apiIdParam)) return n;
-    final result=await get(uri.replace(queryParameters:{apiIdParam:n.id}));
-    dynamic value=result;
-    for(int i=0;i<5 && value is Map;i++) {
-      if(value['episodes'] is List || value['episode_list'] is List || value['play_list'] is List) {
-        final parsed=Novel.parse(Map<String,dynamic>.from(value));
-        return Novel(n.id,n.title,n.synopsis,n.genre,n.cover,parsed.episodes);
-      }
-      dynamic next;
-      for(final key in ['data','result','info','playlet','detail']) {
-        if(value[key] is Map) { next=value[key]; break; }
-      }
-      if(next==null) break;
-      value=next;
-    }
-    throw const FormatException('API não retornou episódios reconhecíveis');
+    throw const FormatException('A API não retornou episódios');
   }
 }
