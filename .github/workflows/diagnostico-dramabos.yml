@@ -26,3 +26,24 @@ jobs:
               except Exception as e:
                   print(p,type(e).__name__,str(e)[:120])
           PY
+      - name: Testar gateway NovelPlay no Render
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json
+          origin='https://novelplay-api.onrender.com'
+          for path in ['/api/dramabos/providers','/api/dramabos/status',
+                       '/api/dramabos/home/dramawave',
+                       '/api/dramabos/search/dramawave?keyword=beijo']:
+              try:
+                  with urllib.request.urlopen(origin+path,timeout=50) as r:
+                      body=json.load(r)
+                      print('CHECK',path,'HTTP',r.status,
+                            'providers',len(body.get('providers',[])),
+                            'results',len(body.get('results',[])),
+                            'configured',body.get('configured'))
+              except urllib.error.HTTPError as e:
+                  data=e.read(500).decode('utf-8','replace')
+                  print('CHECK',path,'HTTP',e.code,'BODY',data)
+              except Exception as e:
+                  print('CHECK',path,'ERROR',type(e).__name__,str(e)[:200])
+          PY
