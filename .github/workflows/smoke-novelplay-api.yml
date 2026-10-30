@@ -12,6 +12,15 @@ jobs:
         run: |
           curl --fail --show-error --silent --max-time 40 --retry 2 --retry-delay 3             https://novelplay-api.onrender.com/health | tee /tmp/health.json
           python3 -c 'import json; data=json.load(open("/tmp/health.json")); assert data["status"] == "ok"'
+      - name: Confirmar NovelPlay no navegador
+        run: |
+          curl --fail --show-error --silent --max-time 40 --retry 2 --retry-delay 3 \
+            https://novelplay-api.onrender.com/ -o /tmp/novelplay.html
+          grep -q 'Novelinhas no seu navegador' /tmp/novelplay.html
+          curl --fail --show-error --silent --max-time 30 \
+            https://novelplay-api.onrender.com/manifest.json -o /tmp/manifest.json
+          python3 -c 'import json; j=json.load(open("/tmp/manifest.json")); assert j["short_name"] == "NovelPlay"'
+          echo "NovelPlay Web disponível e manifesto válido"
       - name: Consultar catálogo e registrar resultado
         run: |
           status=$(curl --silent --show-error --max-time 45 --retry 1             -o /tmp/catalog.json -w '%{http_code}'             https://novelplay-api.onrender.com/api/v1/reelshort/recommended)
