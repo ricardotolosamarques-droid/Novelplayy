@@ -150,7 +150,7 @@ Vibeshort|vibeshort
         id, title,
         asText(node['cover'] ?? node['poster'] ??
             node['book_pic'] ?? node['image']),
-        asText(node['synopsis'] ?? node['description']),
+        asText(node['synopsis'] ?? node['description'] ?? node['special_desc']),
         asGenre(node['genre'] ?? node['category']),
         asInt(node['episodes'] ?? node['episodeCount'] ?? node['chapter_count']),
       ));
@@ -166,12 +166,14 @@ Vibeshort|vibeshort
           node['serial_number'] ?? node['episodeNumber']);
       if (n <= 0) continue;
       // Free only when the provider explicitly says locked:false.
-      final isFree = node.containsKey('locked') && node['locked'] == false;
+      final isFree =
+          (node.containsKey('locked') && node['locked'] == false) ||
+          (node.containsKey('free') && node['free'] == true);
       output.add(DramaEpisode(n,
         asText(node['title'] ?? node['name']).isEmpty
             ? 'Episódio $n' : asText(node['title'] ?? node['name']),
         asText(node['thumbnail'] ?? node['cover']),
-        asText(node['code'] ?? node['episodeCode']),
+        asText(node['code'] ?? node['episodeCode'] ?? node['chapter_id']),
         !isFree));
     }
     output.sort((a, b) => a.number.compareTo(b.number));
@@ -181,6 +183,109 @@ Vibeshort|vibeshort
   static String prefix(DramaProvider p) => '/' + p.slug + '/api/v1';
   static String gateway(DramaProvider p, String section) =>
       '/api/dramabos/' + section + '/' + p.slug;
+
+  static String reelshortSlug(String title) => title.toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+      .replaceAll(RegExp(r'^-+|-+
+
+  static Future<List<DramaItem>> home(DramaProvider p) async {
+    if (p.slug == 'reelshort') {
+      return items(await get(reelshortEndpoint('/recommended')));
+    }
+    return items(await get(uri(gateway(p, 'home'))));
+  }
+
+  static Future<List<DramaItem>> search(DramaProvider p, String keyword) async {
+    final text = keyword.trim();
+    if (text.isEmpty) return home(p);
+    if (text.length > 100) {
+      throw const FormatException('Use uma pesquisa com até 100 caracteres');
+    }
+    if (p.slug == 'reelshort') {
+      return items(await get(reelshortEndpoint(
+        '/search', {'keywords': text},
+      )));
+    }
+    return items(await get(uri(
+      gateway(p, 'search'), {'keyword': text},
+    )));
+  }
+
+  static Future<List<DramaEpisode>> episodes(
+      DramaProvider p, DramaItem drama) async {
+    if (p.slug == 'reelshort') {
+      final bookId = Uri.encodeComponent(drama.id);
+      final data = await get(reelshortEndpoint(
+        '/episodes/' + bookId,
+        {'filtered_title': reelshortSlug(drama.title)},
+      ));
+      return parseEpisodes(data);
+    }
+    final path = gateway(p, 'episodes') + '/' +
+        Uri.encodeComponent(drama.id);
+    return parseEpisodes(await get(uri(path)));
+  }
+
+  static Future<Uri> play(
+      DramaProvider p, DramaItem drama, DramaEpisode episode) async {
+    if (episode.locked) {
+      throw const FormatException('Este episódio é bloqueado pela plataforma');
+    }
+    if (p.slug == 'reelshort') {
+      if (episode.code.isEmpty) {
+        throw const FormatException('Identificador do episódio indisponível');
+      }
+      final data = await get(reelshortEndpoint(
+        '/video/' + Uri.encodeComponent(drama.id) +
+            '/' + episode.number.toString(),
+        {
+          'filtered_title': reelshortSlug(drama.title),
+          'chapter_id': episode.code,
+        },
+      ));
+      final mediaUrl = data is Map ? asText(data['video_url']) : '';
+      final media = Uri.tryParse(mediaUrl);
+      if (media == null || media.scheme != 'https' ||
+          media.host.isEmpty || media.userInfo.isNotEmpty) {
+        throw const FormatException('Vídeo gratuito indisponível');
+      }
+      return media;
+    }
+    final path = p.slug == 'shortmax' && episode.code.isNotEmpty
+        ? prefix(p) + '/play/' + Uri.encodeComponent(episode.code)
+        : prefix(p) + '/play/' + Uri.encodeComponent(drama.id) +
+            '/' + episode.number.toString();
+    dynamic response = await get(Uri.https(upstreamHost, path));
+    for (var i = 0; i < 3 && response is Map; i++) {
+      if (response['streamUrl'] != null || response['video_url'] != null ||
+          response['playUrl'] != null || response['url'] != null) break;
+      response = response['data'] ?? response['result'];
+    }
+    if (response is! Map) {
+      throw const FormatException('A DramaBos não retornou um link de vídeo');
+    }
+    final link = Uri.tryParse(asText(response['streamUrl'] ??
+        response['video_url'] ?? response['playUrl'] ?? response['url']));
+    if (link == null || link.scheme != 'https' ||
+        link.host.isEmpty || link.userInfo.isNotEmpty) {
+      throw const FormatException('URL de vídeo HTTPS indisponível');
+    }
+    return link;
+  }
+  static Future<bool> connected() async {
+    try {
+      final info = await get(uri('/api/dramabos/status'));
+      return info is Map && info['providers'] == 42;
+    } catch (_) {
+      return false;
+    }
+  }
+
+}
+), '');
+
+  static Uri reelshortEndpoint(String path, [Map<String, String>? params]) =>
+      uri('/api/v1/reelshort' + path, params);
 
   static Future<List<DramaItem>> home(DramaProvider p) async {
     return items(await get(uri(gateway(p, 'home'))));

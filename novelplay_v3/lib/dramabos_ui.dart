@@ -18,7 +18,7 @@ class _DramaBosHomeState extends State<DramaBosHome> {
   @override
   void initState() {
     super.initState();
-    provider = DramaBosApi.providers.firstWhere((p) => p.slug == 'dramabox');
+    provider = DramaBosApi.providers.firstWhere((p) => p.slug == 'reelshort');
     catalog = DramaBosApi.home(provider);
   }
 
@@ -82,10 +82,15 @@ class _DramaBosHomeState extends State<DramaBosHome> {
               Text('42 plataformas • DramaBos',
                 style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 6),
-              const Text(
-                'Explore as plataformas pela API DramaBos. '
-                'A reprodução interna depende de vídeos liberados pela fonte.',
-                style: TextStyle(color: Colors.white70, fontSize: 12),
+              Text(
+                provider.slug == 'reelshort'
+                    ? 'ReelShort: fonte pública alternativa ativa. '
+                      'Episódios gratuitos abrem no player do NovelPlay; '
+                      'a DramaBos continua indisponível nos testes.'
+                    : 'Explore as plataformas pela API DramaBos. '
+                      'A disponibilidade depende do serviço externo e '
+                      'da autorização de acesso.',
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
               ),
               const SizedBox(height: 14),
               DropdownButtonFormField<DramaProvider>(
