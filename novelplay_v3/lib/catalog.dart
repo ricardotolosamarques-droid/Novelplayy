@@ -179,7 +179,7 @@ class Sources {
             .whereType<Map>()
             .map((item) =>
                 Novel.fromReelShortBook(Map<String, dynamic>.from(item)))
-            .where((n) => n.id.isNotEmpty && n.slug.isNotEmpty)
+            .where((n) => n.slug.isNotEmpty)
             .toList();
         return Catalog(titles,
             'Catálogo ReelShort (API comunitária)',
@@ -202,9 +202,34 @@ class Sources {
   }
 
   static Future<Novel> details(Novel novel) async {
-    if (novel.episodes.isNotEmpty || novel.id.isEmpty) return novel;
+    if (novel.episodes.isNotEmpty) return novel;
     if (novel.fromReelShort) {
-      final uri = proxyEndpoint('/episodes/' + Uri.encodeComponent(novel.id));
+      var bookId = novel.id;
+      // The bookshelf does not always include book_id. Look up just
+      // the selected title to avoid many background requests.
+      if (bookId.isEmpty) {
+        final searchUri = proxyEndpoint('/search');
+        if (searchUri == null) {
+          throw const FormatException('API ReelShort não configurada');
+        }
+        final response = await request(searchUri.replace(queryParameters: {
+          'keywords': novel.title,
+        }));
+        if (response is! Map || response['results'] is! List) {
+          throw const FormatException('API não retornou resultado da busca');
+        }
+        for (final candidate in response['results'] as List) {
+          if (candidate is! Map) continue;
+          if ((candidate['filtered_title'] ?? '').toString() == novel.slug) {
+            bookId = (candidate['book_id'] ?? '').toString();
+            break;
+          }
+        }
+        if (bookId.isEmpty) {
+          throw const FormatException('Identificador da novelinha não encontrado');
+        }
+      }
+      final uri = proxyEndpoint('/episodes/' + Uri.encodeComponent(bookId));
       if (uri == null) {
         throw const FormatException('Configure a API ReelShort nas opções');
       }
@@ -222,11 +247,12 @@ class Sources {
           episodes.add(Episode(number, 'Episódio $number', ''));
         }
       }
-      return Novel(novel.id, novel.title, novel.synopsis, novel.genre,
+      return Novel(bookId, novel.title, novel.synopsis, novel.genre,
           novel.cover, episodes,
           slug: novel.slug, fromReelShort: true);
     }
 
+    if (novel.id.isEmpty) return novel;
     final uri = genericEndpoint(apiInfoPath);
     if (uri == null) return novel;
     final response = await request(
