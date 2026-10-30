@@ -22,8 +22,8 @@ class _DramaBosScreenState extends State<DramaBosScreen> {
           return Text(
             active
               ? 'DramaBos conectada. Escolha uma plataforma para pesquisar.'
-              : 'Catálogo de plataformas disponível. Para pesquisar dramas, '
-                'é necessária uma chave DramaBos configurada no Render.',
+              : 'A DramaBos pode estar bloqueando a conexão. '
+                'O acesso gratuito documentado não exige chave.',
             style: TextStyle(color: active ? null :
               Theme.of(context).colorScheme.onSurfaceVariant),
           );

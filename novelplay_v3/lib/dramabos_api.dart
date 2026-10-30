@@ -20,7 +20,7 @@ class DramaEpisode {
 }
 
 class DramaBosApi {
-  static const host = 'novelplay-api.onrender.com';
+  static const host = 'dramabos.live';
   static const providerCsv = '''
 StarShort|starshort
 DramaBite|dramabite
@@ -91,14 +91,8 @@ Vibeshort|vibeshort
           'Talvez a conexão esteja bloqueada pelo servidor.');
       }
       if (response.statusCode != 200) {
-        String message = 'API retornou HTTP ' + response.statusCode.toString();
-        try {
-          final problem = jsonDecode(utf8.decode(response.bodyBytes));
-          if (problem is Map && problem['error'] != null) {
-            message = problem['error'].toString();
-          }
-        } catch (_) {}
-        throw FormatException(message);
+        throw FormatException('A DramaBos retornou HTTP ' +
+            response.statusCode.toString());
       }
       final data = jsonDecode(utf8.decode(response.bodyBytes));
       if (data is Map &&
@@ -176,33 +170,69 @@ Vibeshort|vibeshort
     return output;
   }
 
-  // The Android client uses only the NovelPlay Render service. API keys
-  // remain server-side and are not bundled in the APK.
-  static Future<bool> connected() async {
-    final response = await get(uri('/api/dramabos/providers'));
-    return response is Map && response['configured'] == true;
+  static String prefix(DramaProvider p) => '/' + p.slug + '/api/v1';
+
+  static Future<List<DramaItem>> home(DramaProvider p) async {
+    final path = p.slug == 'flickreels'
+        ? '/flickreels/api/flickreels/trending'
+        : prefix(p) + '/home';
+    return items(await get(uri(path, {'lang':'en'})));
   }
 
   static Future<List<DramaItem>> search(DramaProvider p, String keyword) async {
     final text = keyword.trim();
-    if (text.isEmpty) return [];
+    if (text.isEmpty) return home(p);
     if (text.length > 100) {
       throw const FormatException('Use uma pesquisa com até 100 caracteres');
     }
-    return items(await get(uri('/api/dramabos/search/' + p.slug,
-      {'keyword':text})));
+    final flick = p.slug == 'flickreels';
+    final path = flick ? '/flickreels/api/flickreels/search'
+        : prefix(p) + '/search';
+    final param = flick || p.slug == 'shortmax' ? 'q' : 'keyword';
+    return items(await get(uri(path, {param:text})));
   }
 
   static Future<List<DramaEpisode>> episodes(
       DramaProvider p, DramaItem drama) async {
-    return parseEpisodes(await get(uri('/api/dramabos/episodes/' + p.slug +
-        '/' + Uri.encodeComponent(drama.id))));
+    final flick = p.slug == 'flickreels';
+    final path = flick ? '/flickreels/api/flickreels/allepisode'
+        : prefix(p) + '/episodes/' + Uri.encodeComponent(drama.id);
+    return parseEpisodes(await get(uri(path, flick ? {'id':drama.id} : null)));
   }
 
   static Future<Uri> play(
       DramaProvider p, DramaItem drama, DramaEpisode episode) async {
-    throw const FormatException(
-      'Reprodução de vídeos DramaBos não habilitada: direitos não verificados');
+    if (episode.locked) {
+      throw const FormatException('Este episódio é bloqueado pela plataforma');
+    }
+    final path = p.slug == 'shortmax' && episode.code.isNotEmpty
+        ? prefix(p) + '/play/' + Uri.encodeComponent(episode.code)
+        : prefix(p) + '/play/' + Uri.encodeComponent(drama.id) +
+            '/' + episode.number.toString();
+    dynamic response = await get(uri(path));
+    for (var i = 0; i < 3 && response is Map; i++) {
+      if (response['streamUrl'] != null || response['video_url'] != null ||
+          response['playUrl'] != null || response['url'] != null) break;
+      response = response['data'] ?? response['result'];
+    }
+    if (response is! Map) {
+      throw const FormatException('A DramaBos não retornou um link de vídeo');
+    }
+    final link = Uri.tryParse(asText(response['streamUrl'] ??
+        response['video_url'] ?? response['playUrl'] ?? response['url']));
+    if (link == null || link.scheme != 'https' ||
+        link.host.isEmpty || link.userInfo.isNotEmpty) {
+      throw const FormatException('URL de vídeo HTTPS indisponível');
+    }
+    return link;
+  }
+  static Future<bool> connected() async {
+    try {
+      await get(uri('/api/status'));
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
 }
