@@ -48,8 +48,14 @@ jobs:
           if [[ -n "$API_INDEX_PATH" ]]; then args+=("--dart-define=API_INDEX_PATH=$API_INDEX_PATH"); fi
           if [[ -n "$API_INFO_PATH" ]]; then args+=("--dart-define=API_INFO_PATH=$API_INFO_PATH"); fi
           if [[ -n "$API_INFO_ID_PARAM" ]]; then args+=("--dart-define=API_INFO_ID_PARAM=$API_INFO_ID_PARAM"); fi
-          flutter build apk --release "${args[@]}"
+          # Um APK específico por arquitetura evita alocar o pacote universal inteiro.
+          flutter build apk --release --split-per-abi "${args[@]}"
+      - name: Conferir APK ARM64 do Galaxy A34
+        run: |
+          test -s novelplay_v3/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          ls -lh novelplay_v3/build/app/outputs/flutter-apk/app-*.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: NovelPlay-v3-APK
-          path: novelplay_v3/build/app/outputs/flutter-apk/app-release.apk
+          name: NovelPlay-Galaxy-A34-arm64
+          path: novelplay_v3/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          if-no-files-found: error
