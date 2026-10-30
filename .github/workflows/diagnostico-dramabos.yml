@@ -33,7 +33,11 @@ jobs:
           origin='https://novelplay-api.onrender.com'
           for path in ['/api/dramabos/providers','/api/dramabos/status',
                        '/api/dramabos/home/dramawave',
-                       '/api/dramabos/search/dramawave?keyword=beijo']:
+                       '/api/dramabos/search/dramawave?keyword=beijo',
+                       '/api/dramabos/search/dramabox?keyword=love',
+                       '/api/dramabos/search/reelshort?keyword=love',
+                       '/api/dramabos/search/shortmax?keyword=love',
+                       '/api/dramabos/search/flickreels?keyword=love']:
               try:
                   with urllib.request.urlopen(origin+path,timeout=50) as r:
                       body=json.load(r)
