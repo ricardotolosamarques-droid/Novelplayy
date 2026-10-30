@@ -72,3 +72,18 @@ pública identifica como gratuitos podem solicitar um link HLS usando
 e reproduzi-lo no player Flutter. Episódios pagos permanecem bloqueados e nunca
 são requisitados. A disponibilidade pode mudar; a plataforma não garante
 reprodução ou autorização para uso por terceiros.
+
+
+## DramaBos (versão 0.5)
+
+A tela principal usa a API `https://dramabos.live` diretamente no celular,
+com os 42 provedores anunciados no diretório público. Inclui seleção
+de plataforma, pesquisa, listagem de dramas e episódios e player Flutter
+para os episódios explicitamente marcados como gratuitos (`locked:false`).
+Episódios bloqueados nunca solicitam URL de vídeo. Não abre sites externos.
+
+De acordo com a documentação pública, o acesso gratuito da DramaBos
+não exige chave. O serviço pode responder HTTP 403 (Cloudflare 1010)
+dependendo da origem; o app informa esse erro, sem contorná-lo.
+Não foi possível verificar a reprodução real na infraestrutura
+do GitHub/Render porque as consultas foram bloqueadas pelo provedor.
