@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'catalog.dart';
+import 'dramabos_screen.dart';
 import 'dramabos_ui.dart';
 
 void main() => runApp(const NovelPlay());
@@ -100,6 +101,13 @@ class _HomeState extends State<Home> {
           title: const Text('NovelPlay'),
           actions: [
             IconButton(
+              tooltip: '42 plataformas DramaBos',
+              icon: const Icon(Icons.apps),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => const DramaBosScreen(),
+              )),
+            ),
+            IconButton(
               tooltip: 'Conectar API',
               onPressed: configureApi,
               icon: const Icon(Icons.settings_ethernet),
@@ -126,6 +134,16 @@ class _HomeState extends State<Home> {
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                Card(child: ListTile(
+                  leading: const Icon(Icons.apps),
+                  title: const Text('Explorar 42 plataformas'),
+                  subtitle: const Text('DramaBos • buscas e episódios'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => const DramaBosScreen(),
+                  )),
+                )),
+                const SizedBox(height: 12),
                 Text('Novelinhas',
                     style: Theme.of(context).textTheme.headlineMedium),
                 const SizedBox(height: 4),
