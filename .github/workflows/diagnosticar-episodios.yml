@@ -1,0 +1,36 @@
+name: Diagnosticar disponibilidade pública de episódios
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/diagnosticar-episodios.yml'
+jobs:
+  diagnostico:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Identificar metadados de episódios
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,urllib.request,re
+          base='https://www.reelshort.com'
+          request=urllib.request.Request(base+'/id',headers={'User-Agent':'Mozilla/5.0','Accept':'text/html'})
+          data=urllib.request.urlopen(request,timeout=20).read().decode('utf8','replace')
+          match=re.search(r'"buildId"\s*:\s*"([^"]+)"',data)
+          if not match:
+              print('No buildId found')
+              raise SystemExit(0)
+          bid=match.group(1)
+          book_id='6a7963bafe0db909320bca6e'
+          slug='dimahkotai-darah-perak-'+book_id
+          url=f'{base}/_next/data/{bid}/id/movie/{slug}.json?slug={slug}'
+          page=json.load(urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'}),timeout=20))
+          info=page.get('pageProps',{}).get('data',{})
+          eps=info.get('online_base',[])
+          print('DATA_FIELDS:',sorted(info.keys()))
+          print('EPISODES_COUNT:',len(eps))
+          for ep in eps[:3]:
+              print('EPISODE_FIELDS:',sorted(ep.keys()))
+              small={k:v for k,v in ep.items() if re.search('free|pay|lock|vip|purchase|trial|cost|serial_number|fee|open|permission|charge',k,re.I) and isinstance(v,(str,int,bool,type(None)))}
+              print('ACCESS_HINTS:',small)
+          PY
