@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'catalog.dart';
+import 'dramabos_ui.dart';
 
 void main() => runApp(const NovelPlay());
 
@@ -16,7 +17,7 @@ class NovelPlay extends StatelessWidget {
           brightness: Brightness.dark,
           colorSchemeSeed: const Color(0xffdc467b),
         ),
-        home: const Home(),
+        home: const DramaBosHome(),
       );
 }
 
