@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-// The official DramaBos endpoint is requested directly by the device.
-// No passwords, DRM workarounds, or proxying of paid videos.
+// DramaBos metadata requests go through the NovelPlay Render gateway.
+// An optional access key stays server-side, never in the APK.
 class DramaProvider {
   final String name, slug;
   const DramaProvider(this.name, this.slug);
@@ -20,7 +20,8 @@ class DramaEpisode {
 }
 
 class DramaBosApi {
-  static const host = 'dramabos.live';
+  static const host = 'novelplay-api.onrender.com';
+  static const upstreamHost = 'dramabos.live';
   static const providerCsv = '''
 StarShort|starshort
 DramaBite|dramabite
@@ -79,22 +80,29 @@ Vibeshort|vibeshort
       Uri.https(host, path, query);
 
   static Future<dynamic> get(Uri address) async {
-    if (address.scheme != 'https' || address.host != host) {
-      throw const FormatException('Endereço DramaBos inválido');
+    if (address.scheme != 'https' ||
+        (address.host != host && address.host != upstreamHost)) {
+      throw const FormatException('Endereço da API inválido');
     }
     try {
       final response = await http.get(address,
           headers: const {'Accept': 'application/json'}).timeout(
           const Duration(seconds: 18));
-      if (response.statusCode == 403) {
-        throw const FormatException('A DramaBos recusou o acesso (HTTP 403). '
-          'Talvez a conexão esteja bloqueada pelo servidor.');
+      dynamic data;
+      try {
+        data = jsonDecode(utf8.decode(response.bodyBytes));
+      } catch (_) {
+        throw FormatException(
+            'A fonte retornou resposta inválida (HTTP ${response.statusCode}).');
       }
       if (response.statusCode != 200) {
-        throw FormatException('A DramaBos retornou HTTP ' +
-            response.statusCode.toString());
+        final reason = data is Map
+            ? asText(data['error'] ?? data['message'])
+            : '';
+        throw FormatException(
+            reason.isNotEmpty ? reason :
+            'A DramaBos respondeu HTTP ${response.statusCode}.');
       }
-      final data = jsonDecode(utf8.decode(response.bodyBytes));
       if (data is Map &&
           (data['status'] == false || data['success'] == false)) {
         throw FormatException('DramaBos retornou erro: ' +
@@ -171,12 +179,11 @@ Vibeshort|vibeshort
   }
 
   static String prefix(DramaProvider p) => '/' + p.slug + '/api/v1';
+  static String gateway(DramaProvider p, String section) =>
+      '/api/dramabos/' + section + '/' + p.slug;
 
   static Future<List<DramaItem>> home(DramaProvider p) async {
-    final path = p.slug == 'flickreels'
-        ? '/flickreels/api/flickreels/trending'
-        : prefix(p) + '/home';
-    return items(await get(uri(path, {'lang':'en'})));
+    return items(await get(uri(gateway(p, 'home'))));
   }
 
   static Future<List<DramaItem>> search(DramaProvider p, String keyword) async {
@@ -185,19 +192,16 @@ Vibeshort|vibeshort
     if (text.length > 100) {
       throw const FormatException('Use uma pesquisa com até 100 caracteres');
     }
-    final flick = p.slug == 'flickreels';
-    final path = flick ? '/flickreels/api/flickreels/search'
-        : prefix(p) + '/search';
-    final param = flick || p.slug == 'shortmax' ? 'q' : 'keyword';
-    return items(await get(uri(path, {param:text})));
+    return items(await get(uri(
+      gateway(p, 'search'), {'keyword': text},
+    )));
   }
 
   static Future<List<DramaEpisode>> episodes(
       DramaProvider p, DramaItem drama) async {
-    final flick = p.slug == 'flickreels';
-    final path = flick ? '/flickreels/api/flickreels/allepisode'
-        : prefix(p) + '/episodes/' + Uri.encodeComponent(drama.id);
-    return parseEpisodes(await get(uri(path, flick ? {'id':drama.id} : null)));
+    final path = gateway(p, 'episodes') + '/' +
+        Uri.encodeComponent(drama.id);
+    return parseEpisodes(await get(uri(path)));
   }
 
   static Future<Uri> play(
@@ -209,7 +213,7 @@ Vibeshort|vibeshort
         ? prefix(p) + '/play/' + Uri.encodeComponent(episode.code)
         : prefix(p) + '/play/' + Uri.encodeComponent(drama.id) +
             '/' + episode.number.toString();
-    dynamic response = await get(uri(path));
+    dynamic response = await get(Uri.https(upstreamHost, path));
     for (var i = 0; i < 3 && response is Map; i++) {
       if (response['streamUrl'] != null || response['video_url'] != null ||
           response['playUrl'] != null || response['url'] != null) break;
@@ -228,8 +232,8 @@ Vibeshort|vibeshort
   }
   static Future<bool> connected() async {
     try {
-      await get(uri('/api/status'));
-      return true;
+      final info = await get(uri('/api/dramabos/status'));
+      return info is Map && info['providers'] == 42;
     } catch (_) {
       return false;
     }
