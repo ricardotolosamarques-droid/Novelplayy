@@ -46,3 +46,18 @@ https://novelplay-api.onrender.com/api/v1/reelshort, sem exigir configuração
 manual. A API continua **não oficial** e pode parar de funcionar se a
 estrutura interna do site mudar; não oferece reprodução dos vídeos.
 Para apontar a outro servidor, altere o endereço no botão de conexão.
+
+## Assistir na página oficial (integrado ao aplicativo)
+
+O catálogo e os números de episódios vêm do formato de metadados do
+[Rest-Api-ReelShort](https://github.com/wanglinsaputra/Rest-Api-ReelShort).
+O botão **Assistir no ReelShort** abre a página oficial
+`https://www.reelshort.com/id/movie/{slug}-{book_id}` numa WebView do
+NovelPlay. O usuário pode escolher o episódio pelo site oficial, que aplica
+suas próprias regras de acesso e assinatura.
+
+A implementação não usa o endpoint de HLS do scraper, não injeta
+credenciais, não remove DRM e não desbloqueia episódios premium.
+O player próprio continua disponível para catálogos com vídeos autorizados.
+Caso a WebView não reproduza vídeo ou solicite uma ação incompatível com a
+WebView, use **Copiar link oficial** e abra no navegador.

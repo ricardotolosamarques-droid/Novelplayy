@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'catalog.dart';
+import 'reelshort_web.dart';
 
 void main() => runApp(const NovelPlay());
 
@@ -269,10 +270,24 @@ class _DetailsState extends State<Details> {
                     style:
                         TextStyle(fontSize: 21, fontWeight: FontWeight.bold)),
                 if (novel.fromReelShort)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Text('Lista informativa. Para assistir aos '
-                        'episódios ReelShort, utilize a plataforma oficial.'),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Text(
+                          'Assista pela página oficial do ReelShort, '
+                          'aberta dentro do NovelPlay. Episódios premium '
+                          'continuam sujeitos ao acesso da plataforma.',
+                        ),
+                        const SizedBox(height: 10),
+                        FilledButton.icon(
+                          onPressed: () => _watchOfficial(context, novel),
+                          icon: const Icon(Icons.play_circle_fill),
+                          label: const Text('Assistir no ReelShort'),
+                        ),
+                      ],
+                    ),
                   ),
                 if (novel.episodes.isEmpty)
                   const Text('Não há episódios nesta fonte.'),
@@ -280,26 +295,50 @@ class _DetailsState extends State<Details> {
                   ListTile(
                     leading: CircleAvatar(child: Text(episode.number.toString())),
                     title: Text(episode.title),
-                    subtitle: episode.videoUrl.isEmpty
-                        ? const Text('Reprodução indisponível')
-                        : null,
-                    trailing: Icon(episode.videoUrl.isEmpty
-                        ? Icons.lock_outline
-                        : Icons.play_arrow),
-                    onTap: episode.videoUrl.isEmpty
-                        ? null
-                        : () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => Player(episode),
-                              ),
-                            ),
+                    subtitle: novel.fromReelShort
+                        ? const Text('Abrir página oficial para selecionar')
+                        : episode.videoUrl.isEmpty
+                            ? const Text('Reprodução indisponível')
+                            : null,
+                    trailing: Icon(
+                      novel.fromReelShort
+                          ? Icons.open_in_browser
+                          : episode.videoUrl.isEmpty
+                              ? Icons.lock_outline
+                              : Icons.play_arrow,
+                    ),
+                    onTap: novel.fromReelShort
+                        ? () => _watchOfficial(context, novel)
+                        : episode.videoUrl.isEmpty
+                            ? null
+                            : () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => Player(episode),
+                                  ),
+                                ),
                   ),
               ],
             );
           },
         ),
       );
+}
+
+void _watchOfficial(BuildContext context, Novel novel) {
+  final uri = ReelShortPage.movieUrl(novel.slug, novel.id);
+  if (uri == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Endereço oficial indisponível.')),
+    );
+    return;
+  }
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => ReelShortPage(url: uri, title: novel.title),
+    ),
+  );
 }
 
 class Player extends StatefulWidget {
