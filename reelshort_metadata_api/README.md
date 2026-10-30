@@ -41,3 +41,14 @@ mudar sem aviso. Ele não é uma API oficial, não possui garantia de
 disponibilidade e pode estar sujeito a restrições de uso da plataforma.
 Obtenha autorização para usos além de consultar metadados publicamente
 exibidos. Para assistir, use a plataforma oficial ou conteúdo autorizado.
+
+
+## Reprodução de episódios gratuitos
+
+A API expõe `GET /api/v1/reelshort/video/{book_id}/{episode_num}` com os
+parâmetros `filtered_title` e `chapter_id`. O endpoint revalida o
+identificador, a lista pública e o início dos episódios pagos, liberando
+apenas vídeos anteriores ao limite de pagamento (comparação conservadora).
+A API não obtém acesso pago, não solicita credenciais e não transmite a
+mídia pelo Render; devolve o HTTPS da fonte somente quando o episódio
+está publicamente disponível. Status 403 indica episódio pago/bloqueado.

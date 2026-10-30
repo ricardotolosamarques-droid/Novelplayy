@@ -37,8 +37,8 @@ test('rejeita rota de vídeo com identificadores inválidos sem acessar a fonte'
   let status=0;let output='';
   const response={writeHead:(code)=>{status=code},end:(data)=>{output=String(data)}};
   await handler(request,response);
-  assert.equal(status,404);
-  assert.ok(output.includes('Rota não encontrada'));
+  assert.equal(status,400);
+  assert.ok(output.includes('Número de episódio inválido'));
 });
 
 test('entrega página web e manifesto sem criar sessão de instalação',async()=>{

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'catalog.dart';
-import 'reelshort_web.dart';
 
 void main() => runApp(const NovelPlay());
 
@@ -272,51 +271,51 @@ class _DetailsState extends State<Details> {
                 if (novel.fromReelShort)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const Text(
-                          'Assista pela página oficial do ReelShort, '
-                          'aberta dentro do NovelPlay. Episódios premium '
-                          'continuam sujeitos ao acesso da plataforma.',
-                        ),
-                        const SizedBox(height: 10),
-                        FilledButton.icon(
-                          onPressed: () => _watchOfficial(context, novel),
-                          icon: const Icon(Icons.play_circle_fill),
-                          label: const Text('Assistir no ReelShort'),
-                        ),
-                      ],
+                    child: Text(
+                      'Selecione um episódio gratuito para assistir '
+                      'diretamente no NovelPlay. Os episódios pagos '
+                      'não ficam disponíveis nesta integração.',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 if (novel.episodes.isEmpty)
                   const Text('Não há episódios nesta fonte.'),
                 for (final episode in novel.episodes)
                   ListTile(
-                    leading: CircleAvatar(child: Text(episode.number.toString())),
-                    title: Text(episode.title),
-                    subtitle: novel.fromReelShort
-                        ? const Text('Abrir página oficial para selecionar')
-                        : episode.videoUrl.isEmpty
-                            ? const Text('Reprodução indisponível')
-                            : null,
-                    trailing: Icon(
-                      novel.fromReelShort
-                          ? Icons.open_in_browser
-                          : episode.videoUrl.isEmpty
-                              ? Icons.lock_outline
-                              : Icons.play_arrow,
+                    leading: CircleAvatar(
+                      child: Text(episode.number.toString()),
                     ),
-                    onTap: novel.fromReelShort
-                        ? () => _watchOfficial(context, novel)
-                        : episode.videoUrl.isEmpty
-                            ? null
-                            : () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => Player(episode),
-                                  ),
+                    title: Text(episode.title),
+                    subtitle: Text(
+                      novel.fromReelShort
+                          ? episode.isFree
+                              ? 'Gratuito • assistir aqui'
+                              : 'Episódio pago • indisponível'
+                          : episode.videoUrl.isEmpty
+                              ? 'Reprodução indisponível'
+                              : 'Assistir no NovelPlay',
+                    ),
+                    trailing: Icon(
+                      novel.fromReelShort && !episode.isFree ||
+                              !novel.fromReelShort && episode.videoUrl.isEmpty
+                          ? Icons.lock_outline
+                          : Icons.play_circle,
+                    ),
+                    onTap: (novel.fromReelShort
+                                ? !episode.isFree
+                                : episode.videoUrl.isEmpty)
+                        ? null
+                        : () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => Player(
+                                  episode: episode,
+                                  novel: novel,
                                 ),
+                              ),
+                            ),
                   ),
               ],
             );
@@ -325,25 +324,10 @@ class _DetailsState extends State<Details> {
       );
 }
 
-void _watchOfficial(BuildContext context, Novel novel) {
-  final uri = ReelShortPage.movieUrl(novel.slug, novel.id);
-  if (uri == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Endereço oficial indisponível.')),
-    );
-    return;
-  }
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => ReelShortPage(url: uri, title: novel.title),
-    ),
-  );
-}
-
 class Player extends StatefulWidget {
   final Episode episode;
-  const Player(this.episode, {super.key});
+  final Novel novel;
+  const Player({super.key, required this.episode, required this.novel});
 
   @override
   State<Player> createState() => _PlayerState();
@@ -361,19 +345,18 @@ class _PlayerState extends State<Player> {
   }
 
   Future<void> initialize() async {
-    final uri = Sources.valid(widget.episode.videoUrl);
-    if (uri == null) {
-      if (mounted) {
-        setState(() {
-          error = 'Endereço de vídeo ausente ou inválido.';
-          loading = false;
-        });
-      }
-      return;
-    }
-    final player = VideoPlayerController.networkUrl(uri);
-    controller = player;
     try {
+      final uri = widget.novel.fromReelShort
+          ? await Sources.resolveReelShortVideo(
+              widget.novel, widget.episode,
+            )
+          : Sources.valid(widget.episode.videoUrl);
+      if (uri == null) {
+        throw const FormatException('Endereço de vídeo ausente ou inválido');
+      }
+      if (!mounted) return;
+      final player = VideoPlayerController.networkUrl(uri);
+      controller = player;
       await player.initialize();
       if (!mounted) return;
       setState(() => loading = false);
@@ -414,6 +397,12 @@ class _PlayerState extends State<Player> {
                                 ? controller!.value.aspectRatio
                                 : 9 / 16,
                             child: VideoPlayer(controller!),
+                          ),
+                        if (controller != null)
+                          VideoProgressIndicator(
+                            controller!,
+                            allowScrubbing: true,
+                            padding: const EdgeInsets.all(12),
                           ),
                         const SizedBox(height: 16),
                         IconButton.filled(

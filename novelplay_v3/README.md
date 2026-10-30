@@ -61,3 +61,14 @@ credenciais, não remove DRM e não desbloqueia episódios premium.
 O player próprio continua disponível para catálogos com vídeos autorizados.
 Caso a WebView não reproduza vídeo ou solicite uma ação incompatível com a
 WebView, use **Copiar link oficial** e abra no navegador.
+
+
+## Episódios dentro do NovelPlay
+
+A partir da versão 0.4, o app exibe a lista completa de episódios consultados
+na API comunitária, sem redirecionar para o site. Episódios que a própria página
+pública identifica como gratuitos podem solicitar um link HLS usando
+`GET /api/v1/reelshort/video/{book_id}/{numero}?filtered_title=...&chapter_id=...`
+e reproduzi-lo no player Flutter. Episódios pagos permanecem bloqueados e nunca
+são requisitados. A disponibilidade pode mudar; a plataforma não garante
+reprodução ou autorização para uso por terceiros.

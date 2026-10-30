@@ -6,8 +6,11 @@ class Episode {
   final int number;
   final String title;
   final String videoUrl;
+  final String chapterId;
+  final bool isFree;
 
-  const Episode(this.number, this.title, this.videoUrl);
+  const Episode(this.number, this.title, this.videoUrl,
+      {this.chapterId = '', this.isFree = true});
 
   factory Episode.fromJson(Map<String, dynamic> value) {
     final number = int.tryParse((value['number'] ??
@@ -184,7 +187,8 @@ class Sources {
             .toList();
         return Catalog(titles,
             'Catálogo ReelShort (API comunitária)',
-            'Catálogo informativo. Vídeos do ReelShort não estão integrados.');
+            'Episódios públicos disponíveis para reprodução no NovelPlay. '
+            'Episódios pagos continuam bloqueados.');
       } catch (error) {
         return demo('Falha na conexão com a API ReelShort: $error');
       }
@@ -200,6 +204,32 @@ class Sources {
     }
     return demo(
       'Sem API configurada: a demonstração não contém novelinhas reais.');
+  }
+
+  static Future<Uri> resolveReelShortVideo(Novel novel, Episode episode) async {
+    if (!novel.fromReelShort || novel.id.isEmpty ||
+        episode.chapterId.isEmpty || !episode.isFree) {
+      throw const FormatException('Episódio indisponível para reprodução aqui');
+    }
+    final url = proxyEndpoint(
+      '/video/' + Uri.encodeComponent(novel.id) + '/' +
+          episode.number.toString(),
+    );
+    if (url == null) {
+      throw const FormatException('API ReelShort não configurada');
+    }
+    final response = await request(url.replace(queryParameters: {
+      'filtered_title': novel.slug,
+      'chapter_id': episode.chapterId,
+    }));
+    if (response is! Map) {
+      throw const FormatException('A API não retornou um vídeo válido');
+    }
+    final media = valid((response['video_url'] ?? '').toString());
+    if (media == null) {
+      throw const FormatException('O episódio gratuito não tem vídeo disponível');
+    }
+    return media;
   }
 
   static Future<Novel> details(Novel novel) async {
@@ -245,9 +275,16 @@ class Sources {
         if (item is! Map) continue;
         final number = int.tryParse((item['episode'] ?? '').toString());
         if (number != null) {
-          episodes.add(Episode(number, 'Episódio $number', ''));
+          episodes.add(Episode(
+            number,
+            'Episódio $number',
+            '',
+            chapterId: (item['chapter_id'] ?? '').toString(),
+            isFree: item['free'] == true,
+          ));
         }
       }
+      episodes.sort((a, b) => a.number.compareTo(b.number));
       return Novel(bookId, novel.title, novel.synopsis, novel.genre,
           novel.cover, episodes,
           slug: novel.slug, fromReelShort: true);
