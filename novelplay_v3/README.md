@@ -40,6 +40,9 @@ direitos para disponibilizar os vídeos em outro aplicativo.
 
 Configure `REELSHORT_API_URL` como variável do GitHub Actions com a URL
 completa do prefixo do proxy, por exemplo `https://SEU-SERVIDOR/api/v1/reelshort`.
-O proxy não é hospedado por este projeto. Não existe URL pública confirmada,
-e a fonte pode parar de funcionar com alterações no site ReelShort.
-A interface mostra erro e catálogo de demonstração quando não há serviço.
+O serviço de metadados do NovelPlay foi criado no plano gratuito do Render em
+https://novelplay-api.onrender.com. O aplicativo usa por padrão
+https://novelplay-api.onrender.com/api/v1/reelshort, sem exigir configuração
+manual. A API continua **não oficial** e pode parar de funcionar se a
+estrutura interna do site mudar; não oferece reprodução dos vídeos.
+Para apontar a outro servidor, altere o endereço no botão de conexão.
