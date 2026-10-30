@@ -1,7 +1,8 @@
 // NovelPlay metadata adapter. Inspired by the MIT-licensed project
 // https://github.com/wanglinsaputra/Rest-Api-ReelShort
-// This implementation reads publicly exposed catalog metadata only.
-// It does not expose episode video URLs or circumvent paid access.
+// Reads public metadata and provides a native-player URL only for episodes
+// marked as publicly available by the official page. Never unlocks premium
+// chapters, rehosts media, or bypasses login/DRM.
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { URL } from 'node:url';
@@ -41,7 +42,7 @@ async function fetchText(url) {
     signal: AbortSignal.timeout(12000),
     headers: {
       'Accept': 'application/json, text/html;q=0.9, */*;q=0.8',
-      'User-Agent': 'NovelPlay-Metadata/1.0 (+public catalog only)',
+      'User-Agent': 'NovelPlay/1.1 (+public metadata and free episodes)',
     },
   });
   if (!response.ok) {
@@ -107,11 +108,31 @@ export function normalizeBook(book) {
   };
 }
 
-export function normalizeEpisodes(raw) {
-  return asArray(raw).map((episode) => ({
-    episode: Number(episode?.serial_number || 0),
-    chapter_id: String(episode?.chapter_id || ''),
-  })).filter((episode) => Number.isInteger(episode.episode) &&
+// paid_start on the public title page marks the start of paid episodes.
+// Use a strict, conservative boundary (episode < paid_start) to avoid
+// accidentally granting access at the transition episode.
+export function publicEpisodeAccess(bookInfo, episodeNumber) {
+  const number = Number(episodeNumber);
+  if (!Number.isSafeInteger(number) || number < 1 || !bookInfo ||
+      typeof bookInfo !== 'object') return false;
+  const isPaid = Number(bookInfo.is_paid);
+  const paidStart = Number(bookInfo.paid_start);
+  if (isPaid === 0 && Number.isSafeInteger(paidStart) && paidStart === 0) {
+    return true;
+  }
+  if (!Number.isSafeInteger(paidStart) || paidStart < 1) return false;
+  return number < paidStart;
+}
+
+export function normalizeEpisodes(raw, bookInfo = null) {
+  return asArray(raw).map((chapter) => {
+    const episode = Number(chapter?.serial_number || 0);
+    return {
+      episode,
+      chapter_id: String(chapter?.chapter_id || ''),
+      free: publicEpisodeAccess(bookInfo, episode),
+    };
+  }).filter((episode) => Number.isSafeInteger(episode.episode) &&
     episode.episode > 0 && episode.chapter_id);
 }
 
@@ -158,18 +179,65 @@ async function search(keywords) {
   };
 }
 
-async function episodes(bookId, filteredTitle) {
+async function bookEpisodes(bookId, filteredTitle) {
   const id = requireToken(bookId);
   const title = requireToken(filteredTitle);
   const slug = title + '-' + id;
   const suffix = '/movie/' + slug + '.json?slug=' +
     encodeURIComponent(slug);
   const payload = await pageData(suffix);
-  const raw = payload?.pageProps?.data?.online_base;
+  const info = payload?.pageProps?.data;
+  const raw = info?.online_base;
   if (!Array.isArray(raw)) {
     throw new Error('A estrutura de episódios do ReelShort mudou');
   }
-  return { episodes: normalizeEpisodes(raw) };
+  return { info, chapters: normalizeEpisodes(raw, info), id, title };
+}
+
+async function episodes(bookId, filteredTitle) {
+  const { chapters } = await bookEpisodes(bookId, filteredTitle);
+  return { episodes: chapters };
+}
+
+async function freeEpisodeVideo(bookId, episodeNumber, filteredTitle, chapterId) {
+  const number = Number(episodeNumber);
+  if (!Number.isSafeInteger(number) || number < 1 || number > 10000) {
+    throw new HttpError(400, 'Número de episódio inválido');
+  }
+  const chapter = requireToken(chapterId);
+  const { chapters, id, title } = await bookEpisodes(bookId, filteredTitle);
+  const requested = chapters.find((entry) =>
+    entry.episode === number && entry.chapter_id === chapter);
+  if (!requested) throw new HttpError(404, 'Episódio não encontrado');
+  if (!requested.free) {
+    throw new HttpError(403, 'Episódio pago: reprodução independente não disponível');
+  }
+  // Public chapter only. No cookies, subscription tokens, credentials, or
+  // requests to paid chapters. The original provider serves the HLS media.
+  const slug = 'episode-' + number + '-' + title + '-' + id + '-' + chapter;
+  const suffix = '/episodes/' + slug + '.json?play_time=1&slug=' +
+    encodeURIComponent(slug);
+  const payload = await pageData(suffix);
+  const mediaInfo = payload?.pageProps?.data;
+  if (!mediaInfo || mediaInfo.chapter_id !== chapter ||
+      Number(mediaInfo.serial_number) !== number ||
+      (Number.isSafeInteger(Number(mediaInfo.paid_start)) &&
+        Number(mediaInfo.paid_start) > 0 &&
+        number >= Number(mediaInfo.paid_start))) {
+    throw new HttpError(403, 'Reprodução não autorizada para este episódio');
+  }
+  const link = String(mediaInfo.video_url || '');
+  let url;
+  try { url = new URL(link); } catch {
+    throw new HttpError(404, 'Vídeo público indisponível');
+  }
+  if (url.protocol !== 'https:' || url.username || url.password ||
+      !url.hostname || url.hostname === 'localhost' ||
+      url.hostname.endsWith('.local')) {
+    throw new HttpError(404, 'Endereço de vídeo inválido');
+  }
+  return { video_url: url.href, episode: number,
+    duration: Number(mediaInfo.duration || 0) };
 }
 
 export function sendJson(res, status, value) {
@@ -214,7 +282,7 @@ export async function handler(req, res) {
     }
     if (path === '/health') {
       return sendJson(res, 200,
-        { status: 'ok', mode: 'metadata-only', service: 'novelplay' });
+        { status: 'ok', mode: 'public-free-hls', service: 'novelplay' });
     }
     if (path === PREFIX + '/search') {
       return sendJson(res, 200,
@@ -229,6 +297,14 @@ export async function handler(req, res) {
     if (match) {
       return sendJson(res, 200,
         await episodes(match[1], url.searchParams.get('filtered_title')));
+    }
+    const videoMatch = path.match(/^\/api\/v1\/reelshort\/video\/([^/]+)\/(\d+)$/);
+    if (videoMatch) {
+      return sendJson(res, 200, await freeEpisodeVideo(
+        videoMatch[1], videoMatch[2],
+        url.searchParams.get('filtered_title'),
+        url.searchParams.get('chapter_id'),
+      ));
     }
     return sendJson(res, 404, { error: 'Rota não encontrada' });
   } catch (error) {
