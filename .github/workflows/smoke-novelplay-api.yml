@@ -1,0 +1,23 @@
+name: Verificar API publicada
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/smoke-novelplay-api.yml'
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Testar health do servidor
+        run: |
+          curl --fail --show-error --silent --max-time 40 --retry 2 --retry-delay 3             https://novelplay-api.onrender.com/health | tee /tmp/health.json
+          python3 -c 'import json; data=json.load(open("/tmp/health.json")); assert data["status"] == "ok"'
+      - name: Consultar catálogo e registrar resultado
+        run: |
+          status=$(curl --silent --show-error --max-time 45 --retry 1             -o /tmp/catalog.json -w '%{http_code}'             https://novelplay-api.onrender.com/api/v1/reelshort/recommended)
+          echo "CATALOG_HTTP_STATUS=$status"
+          head -c 1200 /tmp/catalog.json || true
+          echo
+          if [ "$status" != "200" ]; then
+            echo "::warning::Servidor online, mas catálogo não está disponível (HTTP $status)"
+          fi
