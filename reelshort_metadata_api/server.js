@@ -7,6 +7,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { URL } from 'node:url';
 import { fileURLToPath } from 'node:url';
+import { handleDramaBos } from './dramabos.js';
 
 const PREFIX = '/api/v1/reelshort';
 const REELSHORT_ORIGIN = 'https://www.reelshort.com';
@@ -280,6 +281,7 @@ export async function handler(req, res) {
       });
       return res.end(contents);
     }
+    if (await handleDramaBos(url, req, res)) return;
     if (path === '/health') {
       return sendJson(res, 200,
         { status: 'ok', mode: 'public-free-hls', service: 'novelplay' });
