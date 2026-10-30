@@ -83,8 +83,8 @@ class _DramaBosHomeState extends State<DramaBosHome> {
                 style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 6),
               const Text(
-                'Escolha uma plataforma. Os episódios disponíveis '
-                'podem ser assistidos aqui, sem abrir outros sites.',
+                'Explore as plataformas pela API DramaBos. '
+                'A reprodução interna depende de vídeos liberados pela fonte.',
                 style: TextStyle(color: Colors.white70, fontSize: 12),
               ),
               const SizedBox(height: 14),
@@ -142,11 +142,17 @@ class _DramaBosHomeState extends State<DramaBosHome> {
                       children: [
                         const Icon(Icons.cloud_off, size: 48),
                         const SizedBox(height: 12),
-                        const Text('Não foi possível consultar a DramaBos.',
+                        const Text('A DramaBos não respondeu à consulta.',
                             textAlign: TextAlign.center),
                         const SizedBox(height: 8),
                         Text(snapshot.error.toString(),
                             textAlign: TextAlign.center),
+                        const SizedBox(height: 8),
+                        const Text('Se aparecer HTTP 403 ou 404, '
+                            'a indisponibilidade pode estar no servidor '
+                            'da DramaBos, não no seu celular.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 12)),
                         const SizedBox(height: 12),
                         FilledButton.icon(
                           onPressed: () => refresh(),

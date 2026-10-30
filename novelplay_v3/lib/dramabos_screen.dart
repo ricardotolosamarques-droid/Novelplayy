@@ -21,9 +21,10 @@ class _DramaBosScreenState extends State<DramaBosScreen> {
           final active = state.data == true;
           return Text(
             active
-              ? 'DramaBos conectada. Escolha uma plataforma para pesquisar.'
-              : 'A DramaBos pode estar bloqueando a conexão. '
-                'O acesso gratuito documentado não exige chave.',
+              ? 'O servidor NovelPlay está online. O catálogo depende '
+                'da disponibilidade da API DramaBos.'
+              : 'Não foi possível contatar o servidor NovelPlay. '
+                'A DramaBos também pode exigir uma chave de API.',
             style: TextStyle(color: active ? null :
               Theme.of(context).colorScheme.onSurfaceVariant),
           );
