@@ -1,0 +1,20 @@
+name: Testar API do NovelPlay
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'reelshort_metadata_api/**'
+      - '.github/workflows/reelshort-metadata.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Sintaxe e testes
+        working-directory: reelshort_metadata_api
+        run: |
+          npm run check
+          npm test

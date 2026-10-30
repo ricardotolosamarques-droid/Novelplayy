@@ -1,0 +1,13 @@
+{
+  "name": "novelplay-reelshort-metadata",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Read-only metadata API adapter for NovelPlay",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test",
+    "check": "node --check server.js"
+  }
+}
