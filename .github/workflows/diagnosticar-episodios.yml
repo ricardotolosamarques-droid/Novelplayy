@@ -29,8 +29,28 @@ jobs:
           eps=info.get('online_base',[])
           print('DATA_FIELDS:',sorted(info.keys()))
           print('EPISODES_COUNT:',len(eps))
+          print('ACCESS_POLICY_FIELDS:',{k: info.get(k) for k in ('is_paid','paid_start','is_preview','start_play','total')})
+          print('FIRST_EPISODES:',[ {k:ep.get(k) for k in ('serial_number','chapter_type','chapter_weight','status')} for ep in eps[:5]])
           for ep in eps[:3]:
               print('EPISODE_FIELDS:',sorted(ep.keys()))
               small={k:v for k,v in ep.items() if re.search('free|pay|lock|vip|purchase|trial|cost|serial_number|fee|open|permission|charge',k,re.I) and isinstance(v,(str,int,bool,type(None)))}
               print('ACCESS_HINTS:',small)
+          if eps:
+              first=eps[0]
+              episode=first.get('serial_number')
+              chapter_id=first.get('chapter_id')
+              video_slug=f'episode-{episode}-{slug}-{chapter_id}'
+              video_url=f'{base}/_next/data/{bid}/id/episodes/{video_slug}.json?play_time=1&slug={video_slug}'
+              try:
+                  video=json.load(urllib.request.urlopen(urllib.request.Request(video_url,headers={'User-Agent':'Mozilla/5.0'}),timeout=20))
+                  video_data=video.get('pageProps',{}).get('data',{})
+                  hls=video_data.get('video_url','')
+                  print('FIRST_VIDEO_METADATA:',{
+                      'fields': sorted(video_data.keys()),
+                      'has_hls':bool(hls),
+                      'https':str(hls).startswith('https://'),
+                      'duration':video_data.get('duration'),
+                  })
+              except Exception as exc:
+                  print('FIRST_VIDEO_METADATA_ERROR:',type(exc).__name__,str(exc)[:150])
           PY
