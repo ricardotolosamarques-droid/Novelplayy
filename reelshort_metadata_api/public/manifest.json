@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "NovelPlay — Novelinhas",
+  "short_name": "NovelPlay",
+  "description": "Catálogo de novelinhas no navegador, sem APK.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0d0c15",
+  "theme_color": "#100d19",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -26,3 +26,14 @@ test('não disponibiliza rota de vídeo',async()=>{
   await handler(request,response);
   assert.equal(status,404);
 });
+
+test('entrega página web e manifesto sem criar sessão de instalação',async()=>{
+  for(const [path,mime] of [['/','text/html'],['/manifest.json','application/manifest+json'],['/icon.svg','image/svg+xml']]){
+    let status=0;let contentType='';let body;
+    const response={writeHead:(code,headers)=>{status=code;contentType=headers['Content-Type'];},end:(data)=>{body=String(data);}};
+    await handler({method:'GET',url:path},response);
+    assert.equal(status,200);
+    assert.ok(contentType.startsWith(mime));
+    assert.ok(body.length>100);
+  }
+});

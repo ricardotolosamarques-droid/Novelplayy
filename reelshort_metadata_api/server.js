@@ -3,6 +3,7 @@
 // This implementation reads publicly exposed catalog metadata only.
 // It does not expose episode video URLs or circumvent paid access.
 import http from 'node:http';
+import { readFile } from 'node:fs/promises';
 import { URL } from 'node:url';
 import { fileURLToPath } from 'node:url';
 
@@ -193,6 +194,24 @@ export async function handler(req, res) {
   try {
     const url = new URL(req.url || '/', 'http://localhost');
     const path = url.pathname;
+    const publicRoutes = {
+      '/': ['index.html','text/html; charset=utf-8'],
+      '/index.html': ['index.html','text/html; charset=utf-8'],
+      '/manifest.json': ['manifest.json','application/manifest+json; charset=utf-8'],
+      '/sw.js': ['sw.js','text/javascript; charset=utf-8'],
+      '/icon.svg': ['icon.svg','image/svg+xml'],
+    };
+    if (publicRoutes[path]) {
+      const [filename, mime] = publicRoutes[path];
+      const contents = await readFile(new URL('./public/' + filename, import.meta.url));
+      res.writeHead(200, {
+        'Content-Type': mime,
+        'Cache-Control': 'no-cache, must-revalidate',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+      });
+      return res.end(contents);
+    }
     if (path === '/health') {
       return sendJson(res, 200,
         { status: 'ok', mode: 'metadata-only', service: 'novelplay' });
