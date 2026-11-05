@@ -43,6 +43,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
   String? _selectedSeriesName;
   String _searchQuery = '';
   final Set<String> _favoriteIds = <String>{};
+  int _tabIndex = 0;
   late Future<List<dynamic>> _content = _loadSeries();
 
   Future<List<Map<String, dynamic>>> _listChildren(String parentId) async {
@@ -149,6 +150,21 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
             const SizedBox(width: 8),
           ],
         ),
+        bottomNavigationBar: _selectedFolderId == null
+            ? BottomNavigationBar(
+                currentIndex: _tabIndex,
+                onTap: (index) => setState(() => _tabIndex = index),
+                backgroundColor: const Color(0xff15131c),
+                selectedItemColor: const Color(0xffff6b9d),
+                unselectedItemColor: const Color(0xff8d8797),
+                type: BottomNavigationBarType.fixed,
+                items: const [
+                  BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Início'),
+                  BottomNavigationBarItem(icon: Icon(Icons.explore_rounded), label: 'Explorar'),
+                  BottomNavigationBarItem(icon: Icon(Icons.bookmark_rounded), label: 'Minha lista'),
+                ],
+              )
+            : null,
         body: FutureBuilder<List<dynamic>>(
           future: _content,
           builder: (context, snapshot) {
@@ -165,7 +181,11 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
             final items = snapshot.data ?? [];
             if (_selectedFolderId == null) {
               final allSeries = items.cast<DriveSeries>();
-              final series = allSeries.where((item) => item.name.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+              final series = allSeries.where((item) {
+                final matchesSearch = item.name.toLowerCase().contains(_searchQuery.toLowerCase());
+                final matchesTab = _tabIndex != 2 || _favoriteIds.contains(item.id);
+                return matchesSearch && matchesTab;
+              }).toList();
               if (allSeries.isEmpty) {
                 return _DriveMessage(
                   title: 'Nenhuma série encontrada',
@@ -210,8 +230,8 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                     const Text('Uma história\npara maratonar.', style: TextStyle(fontSize: 31, height: 1.04, fontWeight: FontWeight.w900, letterSpacing: -0.8)),
                     const SizedBox(height: 9),
                     Text('${series.length} histórias esperando por você', style: const TextStyle(color: Color(0xffaaa4b4), fontSize: 13)),
-                    const SizedBox(height: 20),
-                    Container(
+                    if (_tabIndex != 2) const SizedBox(height: 20),
+                    if (_tabIndex != 2) Container(
                       height: 174,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(24),
@@ -253,8 +273,8 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 24),
-                    TextField(
+                    if (_tabIndex != 2) const SizedBox(height: 24),
+                    if (_tabIndex != 2) TextField(
                       onChanged: (value) => setState(() => _searchQuery = value),
                       style: const TextStyle(color: Colors.white, fontSize: 14),
                       decoration: InputDecoration(
@@ -272,16 +292,16 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text('EXPLORE', style: TextStyle(color: Color(0xffff83b0), fontSize: 9, letterSpacing: 2, fontWeight: FontWeight.w900)),
+                          Text(_tabIndex == 2 ? 'SUA COLEÇÃO' : _tabIndex == 1 ? 'DESCUBRA MAIS' : 'EM DESTAQUE', style: TextStyle(color: Color(0xffff83b0), fontSize: 9, letterSpacing: 2, fontWeight: FontWeight.w900)),
                           SizedBox(height: 4),
-                          Text('Todas as novelinhas', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.4)),
+                          Text(_tabIndex == 2 ? 'Minha lista' : _tabIndex == 1 ? 'Explore dramas' : 'Novelinhas para assistir', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.4)),
                         ])),
                         Text('${series.length} títulos', style: const TextStyle(color: Color(0xff918b9b), fontSize: 11)),
                       ],
                     ),
                     const SizedBox(height: 15),
                     if (series.isEmpty)
-                      const Padding(padding: EdgeInsets.all(24), child: Text('Nenhuma novelinha encontrada.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)))
+                      Padding(padding: const EdgeInsets.all(24), child: Text(_tabIndex == 2 ? 'Sua lista está vazia. Toque no coração de uma série para salvá-la aqui.' : 'Nenhuma novelinha encontrada.', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60)))
                     else
                       GridView.builder(
                         shrinkWrap: true,
