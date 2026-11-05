@@ -203,7 +203,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                               const SizedBox(height: 18),
                               const Text('Qual vai ser\n a próxima história?', style: TextStyle(fontSize: 27, height: 1.12, fontWeight: FontWeight.w900)),
                               const SizedBox(height: 12),
-                              Text('\${series.length} séries disponíveis', style: const TextStyle(color: Color(0xffe5cbd9), fontSize: 13)),
+                              Text('${series.length} séries disponíveis', style: const TextStyle(color: Color(0xffe5cbd9), fontSize: 13)),
                             ],
                           ),
                         ],
@@ -227,7 +227,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                     Row(
                       children: [
                         const Expanded(child: Text('Explorar séries', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800))),
-                        Text('\${series.length} títulos', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                        Text('${series.length} títulos', style: const TextStyle(color: Colors.white54, fontSize: 12)),
                       ],
                     ),
                     const SizedBox(height: 14),
@@ -308,7 +308,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
             if (episodes.isEmpty) {
               return _DriveMessage(
                 title: 'Nenhum episódio encontrado',
-                message: 'Coloque os vídeos dentro da pasta "\${_selectedSeriesName ?? "da série"}" e atualize a lista.',
+                message: 'Coloque os vídeos dentro da pasta "${_selectedSeriesName ?? "da série"}" e atualize a lista.',
                 onRetry: _refresh,
               );
             }
@@ -328,7 +328,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                         const SizedBox(height: 8),
                         Text(_selectedSeriesName ?? 'Episódios', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
                         const SizedBox(height: 5),
-                        Text('\${episodes.length} episódios • escolha onde continuar', style: const TextStyle(color: Color(0xffe5cbd9), fontSize: 12)),
+                        Text('${episodes.length} episódios • escolha onde continuar', style: const TextStyle(color: Color(0xffe5cbd9), fontSize: 12)),
                       ],
                     ),
                   ),
@@ -353,7 +353,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                                   height: 48,
                                   alignment: Alignment.center,
                                   decoration: BoxDecoration(color: const Color(0xff43243c), borderRadius: BorderRadius.circular(14)),
-                                  child: Text('\${episodes[i].number == 0 ? i + 1 : episodes[i].number}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: Color(0xffff8bb3))),
+                                  child: Text('${episodes[i].number == 0 ? i + 1 : episodes[i].number}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: Color(0xffff8bb3))),
                                 ),
                                 const SizedBox(width: 13),
                                 Expanded(
