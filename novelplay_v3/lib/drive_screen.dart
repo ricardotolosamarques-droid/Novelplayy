@@ -58,7 +58,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
       final uri = Uri.https('www.googleapis.com', '/drive/v3/files', params);
       final response = await http.get(uri).timeout(const Duration(seconds: 25));
       if (response.statusCode != 200) {
-        throw Exception('Google Drive HTTP \${response.statusCode}: \${response.body}');
+        throw Exception('Google Drive HTTP ${response.statusCode}: ${response.body}');
       }
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       allFiles.addAll((data['files'] as List<dynamic>? ?? []).whereType<Map<String, dynamic>>());
@@ -177,7 +177,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                           const Text('GOOGLE DRIVE', style: TextStyle(letterSpacing: 1.4)),
                           const SizedBox(height: 8),
                           const Text('Minhas novelinhas', style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold)),
-                          Text('\${series.length} séries encontradas'),
+                          Text('${series.length} séries encontradas'),
                         ],
                       ),
                     ),
@@ -201,7 +201,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
             if (episodes.isEmpty) {
               return _DriveMessage(
                 title: 'Nenhum episódio encontrado',
-                message: 'Coloque os vídeos dentro da pasta "\${_selectedSeriesName ?? 'da série'}" e atualize a lista.',
+                message: 'Coloque os vídeos dentro da pasta "${_selectedSeriesName ?? "da série"}" e atualize a lista.',
                 onRetry: _refresh,
               );
             }
@@ -222,7 +222,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                         const Text('SÉRIE', style: TextStyle(letterSpacing: 1.4)),
                         const SizedBox(height: 8),
                         Text(_selectedSeriesName ?? 'Episódios', style: const TextStyle(fontSize: 25, fontWeight: FontWeight.bold)),
-                        Text('\${episodes.length} episódios encontrados'),
+                        Text('${episodes.length} episódios encontrados'),
                       ],
                     ),
                   ),
@@ -230,7 +230,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                   for (var i = 0; i < episodes.length; i++)
                     Card(
                       child: ListTile(
-                        leading: CircleAvatar(child: Text('\${episodes[i].number == 0 ? i + 1 : episodes[i].number}')),
+                        leading: CircleAvatar(child: Text('${episodes[i].number == 0 ? i + 1 : episodes[i].number}')),
                         title: Text(episodes[i].name),
                         subtitle: const Text('Assistir'),
                         trailing: const Icon(Icons.play_circle_outline),
