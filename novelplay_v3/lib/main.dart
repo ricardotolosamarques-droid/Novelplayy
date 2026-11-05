@@ -3,6 +3,7 @@ import 'package:video_player/video_player.dart';
 import 'catalog.dart';
 import 'dramabos_screen.dart';
 import 'dramabos_ui.dart';
+import 'drive_screen.dart';
 
 void main() => runApp(const NovelPlay());
 
@@ -42,6 +43,7 @@ class _NovelPlayTabsState extends State<NovelPlayTabs> {
           children: const [
             DramaBosHome(),
             Home(),
+            DriveNovelScreen(),
           ],
         ),
         bottomNavigationBar: NavigationBar(
@@ -57,6 +59,10 @@ class _NovelPlayTabsState extends State<NovelPlayTabs> {
             NavigationDestination(
               icon: Icon(Icons.play_circle_outline),
               label: 'ReelShort',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.folder_shared_outlined),
+              label: 'Meu Drive',
             ),
           ],
         ),
