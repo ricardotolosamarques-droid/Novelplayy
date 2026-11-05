@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 const _folderId = '1O28a3-3bmKkVj_3dS9HlWX0Owyn3eFts';
 const _apiKey = String.fromEnvironment('DRIVE_API_KEY');
@@ -13,6 +14,31 @@ class DriveSeries {
   final String id;
   final String name;
   final String? coverId;
+}
+
+class WatchHistoryEntry {
+  const WatchHistoryEntry({
+    required this.seriesId, required this.seriesName, required this.episodeId,
+    required this.episodeName, required this.positionMs, required this.durationMs,
+    required this.updatedAt,
+  });
+  final String seriesId, seriesName, episodeId, episodeName;
+  final int positionMs, durationMs, updatedAt;
+  factory WatchHistoryEntry.fromJson(Map<String, dynamic> json) => WatchHistoryEntry(
+    seriesId: json['seriesId'] as String? ?? '',
+    seriesName: json['seriesName'] as String? ?? 'Novelinha',
+    episodeId: json['episodeId'] as String? ?? '',
+    episodeName: json['episodeName'] as String? ?? 'Episódio',
+    positionMs: json['positionMs'] as int? ?? 0,
+    durationMs: json['durationMs'] as int? ?? 0,
+    updatedAt: json['updatedAt'] as int? ?? 0,
+  );
+  Map<String, dynamic> toJson() => {
+    'seriesId': seriesId, 'seriesName': seriesName, 'episodeId': episodeId,
+    'episodeName': episodeName, 'positionMs': positionMs,
+    'durationMs': durationMs, 'updatedAt': updatedAt,
+  };
+  double get progress => durationMs <= 0 ? 0 : (positionMs / durationMs).clamp(0.0, 1.0);
 }
 
 class DriveEpisode {
@@ -47,6 +73,38 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
   final Set<String> _favoriteIds = <String>{};
   int _tabIndex = 0;
   late Future<List<dynamic>> _content = _loadSeries();
+  late Future<List<WatchHistoryEntry>> _historyFuture = _loadHistory();
+
+  Future<List<WatchHistoryEntry>> _loadHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('novelinha_watch_history');
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      return decoded.whereType<Map<String, dynamic>>()
+          .map(WatchHistoryEntry.fromJson).toList()
+        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    } catch (_) { return []; }
+  }
+
+  Future<void> _resumeHistory(WatchHistoryEntry entry) async {
+    try {
+      final episodes = await _loadEpisodes(entry.seriesId);
+      if (!mounted || episodes.isEmpty) return;
+      final found = episodes.indexWhere((episode) => episode.id == entry.episodeId);
+      final index = found < 0 ? 0 : found;
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => _DrivePlayerPage(
+        episodes: episodes, initialIndex: index, seriesId: entry.seriesId,
+        seriesName: entry.seriesName,
+        initialPosition: found < 0 ? Duration.zero : Duration(milliseconds: entry.positionMs),
+      )));
+      if (mounted) setState(() => _historyFuture = _loadHistory());
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Não foi possível retomar: $e')),
+      );
+    }
+  }
 
   Future<List<Map<String, dynamic>>> _listChildren(String parentId) async {
     final allFiles = <Map<String, dynamic>>[];
@@ -245,6 +303,78 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                     const Text('Uma história\npara maratonar.', style: TextStyle(fontSize: 31, height: 1.04, fontWeight: FontWeight.w900, letterSpacing: -0.8)),
                     const SizedBox(height: 9),
                     Text('${series.length} histórias esperando por você', style: const TextStyle(color: Color(0xffaaa4b4), fontSize: 13)),
+                    if (_tabIndex == 0)
+                      FutureBuilder<List<WatchHistoryEntry>>(
+                        future: _historyFuture,
+                        builder: (context, snapshot) {
+                          final history = snapshot.data ?? [];
+                          if (history.isEmpty) return const SizedBox.shrink();
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 22),
+                              const Text('CONTINUE ASSISTINDO',
+                                style: TextStyle(color: Color(0xffff83b0), fontSize: 10, letterSpacing: 1.8, fontWeight: FontWeight.w900)),
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                height: 116,
+                                child: ListView.separated(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: history.length,
+                                  separatorBuilder: (_, __) => const SizedBox(width: 11),
+                                  itemBuilder: (context, index) {
+                                    final entry = history[index];
+                                    return SizedBox(
+                                      width: 258,
+                                      child: Material(
+                                        color: const Color(0xff211e2a),
+                                        borderRadius: BorderRadius.circular(16),
+                                        clipBehavior: Clip.antiAlias,
+                                        child: InkWell(
+                                          onTap: () => _resumeHistory(entry),
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(12),
+                                            child: Row(children: [
+                                              Container(
+                                                width: 58, height: 82,
+                                                decoration: BoxDecoration(
+                                                  borderRadius: BorderRadius.circular(10),
+                                                  gradient: const LinearGradient(colors: [Color(0xffa84d79), Color(0xff382039)]),
+                                                ),
+                                                child: const Icon(Icons.play_circle_fill_rounded, color: Colors.white, size: 30),
+                                              ),
+                                              const SizedBox(width: 11),
+                                              Expanded(child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [
+                                                  Text(entry.seriesName, maxLines: 1, overflow: TextOverflow.ellipsis,
+                                                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+                                                  const SizedBox(height: 5),
+                                                  Text(entry.episodeName, maxLines: 1, overflow: TextOverflow.ellipsis,
+                                                    style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                                                  const SizedBox(height: 9),
+                                                  ClipRRect(borderRadius: BorderRadius.circular(8),
+                                                    child: LinearProgressIndicator(value: entry.progress, minHeight: 4,
+                                                      backgroundColor: Colors.white12,
+                                                      valueColor: const AlwaysStoppedAnimation(Color(0xffff6b9d)))),
+                                                  const SizedBox(height: 5),
+                                                  const Text('TOQUE PARA CONTINUAR',
+                                                    style: TextStyle(color: Color(0xffff91b8), fontSize: 8, letterSpacing: 0.8, fontWeight: FontWeight.w900)),
+                                                ],
+                                              )),
+                                            ]),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                     if (_tabIndex != 2) const SizedBox(height: 20),
                     if (_tabIndex != 2) GestureDetector(
                       onTap: series.isEmpty ? null : () => _openSeries(series.first),
@@ -482,7 +612,10 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                         borderRadius: BorderRadius.circular(17),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(17),
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => _DrivePlayerPage(episodes: episodes, initialIndex: i))),
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => _DrivePlayerPage(
+                            episodes: episodes, initialIndex: i,
+                            seriesId: _selectedFolderId!, seriesName: _selectedSeriesName ?? 'Novelinha',
+                          ))),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
                             child: Row(
@@ -553,9 +686,14 @@ class _DriveMessage extends StatelessWidget {
 }
 
 class _DrivePlayerPage extends StatefulWidget {
-  const _DrivePlayerPage({required this.episodes, required this.initialIndex});
+  const _DrivePlayerPage({
+    required this.episodes, required this.initialIndex, required this.seriesId,
+    required this.seriesName, this.initialPosition = Duration.zero,
+  });
   final List<DriveEpisode> episodes;
   final int initialIndex;
+  final String seriesId, seriesName;
+  final Duration initialPosition;
 
   @override
   State<_DrivePlayerPage> createState() => _DrivePlayerPageState();
@@ -569,6 +707,8 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
   bool _showPlaybackControl = true;
   Timer? _hideControlsTimer;
   String? _error;
+  DateTime _lastHistorySave = DateTime.fromMillisecondsSinceEpoch(0);
+  bool _restoredInitialPosition = false;
 
   @override
   void initState() {
@@ -592,6 +732,11 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
       final player = VideoPlayerController.networkUrl(widget.episodes[_index].mediaUri);
       _controller = player;
       await player.initialize();
+      if (!_restoredInitialPosition && _index == widget.initialIndex && widget.initialPosition > Duration.zero) {
+        final target = widget.initialPosition < player.value.duration ? widget.initialPosition : player.value.duration;
+        if (target > Duration.zero) await player.seekTo(target);
+        _restoredInitialPosition = true;
+      }
       player.addListener(_onVideoChanged);
       await player.play();
       if (mounted) {
@@ -640,9 +785,39 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
     );
   }
 
+  Future<void> _persistCurrentProgress() async {
+    final player = _controller;
+    if (player == null || !player.value.isInitialized || _index >= widget.episodes.length) return;
+    final position = player.value.position, duration = player.value.duration;
+    if (position <= Duration.zero || duration <= Duration.zero) return;
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('novelinha_watch_history');
+    List<WatchHistoryEntry> current = [];
+    if (raw != null) {
+      try {
+        current = (jsonDecode(raw) as List<dynamic>)
+            .whereType<Map<String, dynamic>>().map(WatchHistoryEntry.fromJson).toList();
+      } catch (_) {}
+    }
+    final episode = widget.episodes[_index];
+    final entry = WatchHistoryEntry(
+      seriesId: widget.seriesId, seriesName: widget.seriesName,
+      episodeId: episode.id, episodeName: episode.name,
+      positionMs: position.inMilliseconds, durationMs: duration.inMilliseconds,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    );
+    final updated = [entry, ...current.where((item) => item.seriesId != widget.seriesId)]
+        .take(20).map((item) => item.toJson()).toList();
+    await prefs.setString('novelinha_watch_history', jsonEncode(updated));
+  }
+
   void _onVideoChanged() {
     final player = _controller;
     if (player == null || !player.value.isInitialized) return;
+    if (DateTime.now().difference(_lastHistorySave).inSeconds >= 5) {
+      _lastHistorySave = DateTime.now();
+      _persistCurrentProgress();
+    }
     if (player.value.duration > Duration.zero &&
         player.value.position >= player.value.duration &&
         !player.value.isPlaying &&
@@ -657,6 +832,7 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
 
   @override
   void dispose() {
+    _persistCurrentProgress();
     _hideControlsTimer?.cancel();
     _controller?.removeListener(_onVideoChanged);
     _controller?.dispose();
@@ -675,6 +851,7 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
               physics: const NeverScrollableScrollPhysics(),
               itemCount: widget.episodes.length,
               onPageChanged: (value) {
+                _persistCurrentProgress();
                 setState(() => _index = value);
                 _initialize();
               },
