@@ -52,10 +52,18 @@ class DriveEpisode {
     return match == null ? 0 : int.tryParse(match.group(0)!) ?? 0;
   }
 
+  // Primeiro tenta o endpoint oficial da API; depois o link direto de
+  // download do Drive, útil para arquivos compartilhados publicamente.
   Uri get mediaUri => Uri.https(
         'www.googleapis.com',
         '/drive/v3/files/$id',
         {'alt': 'media', 'key': _apiKey},
+      );
+
+  Uri get directDownloadUri => Uri.https(
+        'drive.google.com',
+        '/uc',
+        {'export': 'download', 'id': id, 'confirm': 't'},
       );
 }
 
@@ -732,9 +740,26 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
     });
 
     try {
-      final player = VideoPlayerController.networkUrl(widget.episodes[_index].mediaUri);
-      _controller = player;
-      await player.initialize();
+      final episode = widget.episodes[_index];
+      VideoPlayerController? player;
+      Object? apiError;
+      try {
+        player = VideoPlayerController.networkUrl(episode.mediaUri);
+        _controller = player;
+        await player.initialize();
+      } catch (error) {
+        apiError = error;
+        await player?.dispose();
+        player = VideoPlayerController.networkUrl(episode.directDownloadUri);
+        _controller = player;
+        try {
+          await player.initialize();
+        } catch (fallbackError) {
+          await player.dispose();
+          _controller = null;
+          throw Exception('A API do Drive recusou: $apiError. O link direto também falhou: $fallbackError. Confira se o vídeo está compartilhado como "Qualquer pessoa com o link" e com acesso de leitor.');
+        }
+      }
       if (!_restoredInitialPosition && _index == widget.initialIndex && widget.initialPosition > Duration.zero) {
         final target = widget.initialPosition < player.value.duration ? widget.initialPosition : player.value.duration;
         if (target > Duration.zero) await player.seekTo(target);
