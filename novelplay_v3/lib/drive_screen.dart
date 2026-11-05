@@ -124,24 +124,34 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
+        backgroundColor: const Color(0xff101018),
         appBar: AppBar(
+          backgroundColor: const Color(0xff101018),
+          elevation: 0,
           leading: _selectedFolderId == null
-              ? null
+              ? Padding(
+                  padding: const EdgeInsets.only(left: 12),
+                  child: Container(
+                    decoration: BoxDecoration(color: const Color(0xff292033), borderRadius: BorderRadius.circular(13)),
+                    child: const Icon(Icons.movie_filter_rounded, color: Color(0xffff6b9d)),
+                  ),
+                )
               : IconButton(
                   tooltip: 'Voltar às séries',
                   onPressed: _goBackToSeries,
-                  icon: const Icon(Icons.arrow_back),
+                  icon: const Icon(Icons.arrow_back_rounded),
                 ),
-          title: Text(_selectedSeriesName ?? 'Minhas novelinhas'),
+          title: Text(_selectedSeriesName ?? 'NOVELPLAY', style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.1)),
           actions: [
-            IconButton(tooltip: 'Atualizar Google Drive', onPressed: _refresh, icon: const Icon(Icons.refresh)),
+            IconButton(tooltip: 'Atualizar', onPressed: _refresh, icon: const Icon(Icons.refresh_rounded)),
+            const SizedBox(width: 8),
           ],
         ),
         body: FutureBuilder<List<dynamic>>(
           future: _content,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
+              return const Center(child: CircularProgressIndicator(color: Color(0xffff6b9d)));
             }
             if (snapshot.hasError) {
               return _DriveMessage(
@@ -161,37 +171,105 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                 );
               }
               return RefreshIndicator(
+                color: const Color(0xffff6b9d),
                 onRefresh: _refresh,
                 child: ListView(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(18, 10, 18, 28),
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(18),
+                      padding: const EdgeInsets.all(22),
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(18),
-                        gradient: const LinearGradient(colors: [Color(0xff8d2856), Color(0xff392044)]),
+                        borderRadius: BorderRadius.circular(24),
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xff702b59), Color(0xff30203f), Color(0xff1b1b2b)],
+                        ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Stack(
                         children: [
-                          const Text('GOOGLE DRIVE', style: TextStyle(letterSpacing: 1.4)),
-                          const SizedBox(height: 8),
-                          const Text('Minhas novelinhas', style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold)),
-                          Text('${series.length} séries encontradas'),
+                          const Positioned(right: 0, top: 0, child: Icon(Icons.auto_awesome_rounded, size: 54, color: Color(0x55ffffff))),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(color: const Color(0x33ffffff), borderRadius: BorderRadius.circular(30)),
+                                child: const Text('SEU UNIVERSO DE HISTÓRIAS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.1)),
+                              ),
+                              const SizedBox(height: 18),
+                              const Text('Qual vai ser\n a próxima história?', style: TextStyle(fontSize: 27, height: 1.12, fontWeight: FontWeight.w900)),
+                              const SizedBox(height: 12),
+                              Text('\${series.length} séries disponíveis', style: const TextStyle(color: Color(0xffe5cbd9), fontSize: 13)),
+                            ],
+                          ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    for (final seriesItem in series)
-                      Card(
-                        child: ListTile(
-                          leading: const CircleAvatar(child: Icon(Icons.video_library)),
-                          title: Text(seriesItem.name),
-                          subtitle: const Text('Abrir episódios'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _openSeries(seriesItem),
-                        ),
+                    const SizedBox(height: 26),
+                    Row(
+                      children: [
+                        const Expanded(child: Text('Explorar séries', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800))),
+                        Text('\${series.length} títulos', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: series.length,
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        childAspectRatio: 0.82,
                       ),
+                      itemBuilder: (context, index) {
+                        final item = series[index];
+                        const palettes = [
+                          [Color(0xff74365f), Color(0xff30213f)],
+                          [Color(0xff344d70), Color(0xff1b263c)],
+                          [Color(0xff80502f), Color(0xff392638)],
+                          [Color(0xff315c58), Color(0xff1c303b)],
+                        ];
+                        final colors = palettes[index % palettes.length];
+                        return Material(
+                          color: const Color(0xff1b1b27),
+                          borderRadius: BorderRadius.circular(20),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
+                            onTap: () => _openSeries(item),
+                            child: Ink(
+                              decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: colors)),
+                              child: Stack(
+                                children: [
+                                  const Positioned(right: -12, top: 10, child: Icon(Icons.movie_creation_outlined, size: 94, color: Color(0x22ffffff))),
+                                  Positioned(
+                                    left: 14,
+                                    right: 14,
+                                    bottom: 15,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(9),
+                                          decoration: BoxDecoration(color: const Color(0x33ffffff), borderRadius: BorderRadius.circular(12)),
+                                          child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 22),
+                                        ),
+                                        const SizedBox(height: 13),
+                                        Text(item.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, height: 1.1)),
+                                        const SizedBox(height: 5),
+                                        const Text('TOQUE PARA ASSISTIR', style: TextStyle(fontSize: 9, letterSpacing: 1, color: Color(0xffe6dbe5))),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ],
                 ),
               );
@@ -201,42 +279,69 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
             if (episodes.isEmpty) {
               return _DriveMessage(
                 title: 'Nenhum episódio encontrado',
-                message: 'Coloque os vídeos dentro da pasta "${_selectedSeriesName ?? "da série"}" e atualize a lista.',
+                message: 'Coloque os vídeos dentro da pasta "\${_selectedSeriesName ?? "da série"}" e atualize a lista.',
                 onRetry: _refresh,
               );
             }
             return RefreshIndicator(
+              color: const Color(0xffff6b9d),
               onRefresh: _refresh,
               child: ListView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(18, 10, 18, 28),
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      gradient: const LinearGradient(colors: [Color(0xff8d2856), Color(0xff392044)]),
-                    ),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(22), gradient: const LinearGradient(colors: [Color(0xff702b59), Color(0xff30203f)])),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('SÉRIE', style: TextStyle(letterSpacing: 1.4)),
+                        const Text('SUA SÉRIE', style: TextStyle(fontSize: 10, letterSpacing: 1.4, fontWeight: FontWeight.bold, color: Color(0xfff2c9dc))),
                         const SizedBox(height: 8),
-                        Text(_selectedSeriesName ?? 'Episódios', style: const TextStyle(fontSize: 25, fontWeight: FontWeight.bold)),
-                        Text('${episodes.length} episódios encontrados'),
+                        Text(_selectedSeriesName ?? 'Episódios', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 5),
+                        Text('\${episodes.length} episódios • escolha onde continuar', style: const TextStyle(color: Color(0xffe5cbd9), fontSize: 12)),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
+                  const Text('Lista de episódios', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 12),
                   for (var i = 0; i < episodes.length; i++)
-                    Card(
-                      child: ListTile(
-                        leading: CircleAvatar(child: Text('${episodes[i].number == 0 ? i + 1 : episodes[i].number}')),
-                        title: Text(episodes[i].name),
-                        subtitle: const Text('Assistir'),
-                        trailing: const Icon(Icons.play_circle_outline),
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => _DrivePlayerPage(episodes: episodes, initialIndex: i)),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Material(
+                        color: const Color(0xff1c1c29),
+                        borderRadius: BorderRadius.circular(17),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(17),
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => _DrivePlayerPage(episodes: episodes, initialIndex: i))),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 48,
+                                  height: 48,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(color: const Color(0xff43243c), borderRadius: BorderRadius.circular(14)),
+                                  child: Text('\${episodes[i].number == 0 ? i + 1 : episodes[i].number}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: Color(0xffff8bb3))),
+                                ),
+                                const SizedBox(width: 13),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(episodes[i].name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                                      const SizedBox(height: 4),
+                                      const Text('Pronto para assistir', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Icon(Icons.play_circle_fill_rounded, color: Color(0xffff6b9d), size: 30),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ),
