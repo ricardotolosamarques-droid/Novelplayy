@@ -1,0 +1,51 @@
+name: Preparar Android e obter SHA-1 do Novelinha
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: novelplay_v3
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Instalar Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Gerar estrutura Android com identificador correto
+        run: flutter create --platforms=android --org com.example --project-name novelinha_app .
+
+      - name: Instalar dependências
+        run: flutter pub get
+
+      - name: Mostrar SHA-1 da assinatura de debug
+        working-directory: novelplay_v3/android
+        run: ./gradlew :app:signingReport
+
+      - name: Compilar APK de teste
+        working-directory: novelplay_v3
+        run: flutter build apk --debug
+
+      - name: Disponibilizar APK de teste
+        uses: actions/upload-artifact@v4
+        with:
+          name: novelinha-debug-apk
+          path: novelplay_v3/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
