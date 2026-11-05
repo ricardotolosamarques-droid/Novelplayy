@@ -246,6 +246,16 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
     }
   }
 
+  void _swipeToEpisode(bool next) {
+    final target = _index + (next ? 1 : -1);
+    if (target < 0 || target >= widget.episodes.length) return;
+    _pageController.animateToPage(
+      target,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOut,
+    );
+  }
+
   void _onVideoChanged() {
     final player = _controller;
     if (player == null || !player.value.isInitialized) return;
@@ -277,12 +287,29 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
             PageView.builder(
               controller: _pageController,
               scrollDirection: Axis.vertical,
+              physics: const NeverScrollableScrollPhysics(),
               itemCount: widget.episodes.length,
               onPageChanged: (value) {
                 setState(() => _index = value);
                 _initialize();
               },
               itemBuilder: (_, __) => const ColoredBox(color: Colors.black),
+            ),
+            // Captura explicitamente o gesto vertical. O PageView fica
+            // programático para evitar disputa de gestos com o player de vídeo.
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onVerticalDragEnd: (details) {
+                  final velocity = details.primaryVelocity ?? 0;
+                  if (velocity < -250) {
+                    _swipeToEpisode(true);
+                  } else if (velocity > 250) {
+                    _swipeToEpisode(false);
+                  }
+                },
+                child: const SizedBox.expand(),
+              ),
             ),
             if (_loading)
               const Center(child: CircularProgressIndicator())
