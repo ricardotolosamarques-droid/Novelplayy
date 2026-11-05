@@ -752,15 +752,15 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
 
     try {
       final episode = widget.episodes[_index];
-      VideoPlayerController? player;
+      late VideoPlayerController player;
       Object? apiError;
       try {
-        player = VideoPlayerController.networkUrl(episode.mediaUri, headers: episode.resourceHeaders);
+        player = VideoPlayerController.networkUrl(episode.mediaUri, httpHeaders: episode.resourceHeaders);
         _controller = player;
         await player.initialize();
       } catch (error) {
         apiError = error;
-        await player?.dispose();
+        await player.dispose();
         player = VideoPlayerController.networkUrl(episode.directDownloadUri, headers: episode.resourceHeaders);
         _controller = player;
         try {
