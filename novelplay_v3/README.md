@@ -106,3 +106,10 @@ Pasta configurada: `1O28a3-3bmKkVj_3dS9HlWX0Owyn3eFts`.
 O workflow injeta a chave no build usando `--dart-define`; a chave não é gravada no código-fonte. Como toda chave incluída em um APK pode ser extraída do aplicativo, restrinja-a no Google Cloud Console à Drive API e acompanhe as cotas.
 
 **Limitação que precisa ser testada:** a listagem de arquivos públicos usa a API oficial do Drive. A reprodução também tenta obter o conteúdo pela API, mas o Google pode exigir autorização adicional ou limitar downloads/requisições. O Drive não é uma CDN de streaming; não há garantia de reprodução contínua nem de tráfego ilimitado. Se o vídeo não tocar, a tela mostrará o erro retornado pelo Google.
+
+
+## Estado da autenticação Google Drive — 05/11/2026
+
+A tela **Meu Drive** ainda usa a chave `DRIVE_API_KEY` e consulta uma pasta compartilhada publicamente. Isso **não é ainda a integração OAuth Google com escopo somente leitura** definida para a versão final. A migração para login Google e token OAuth `drive.readonly` permanece pendente; não considere a integração autenticada concluída.
+
+O workflow **Preparar Android e obter SHA-1 do Novelinha** foi corrigido para criar um keystore de depuração antes de executar `signingReport` e falhar caso o SHA-1 não apareça. O SHA-1 produzido por essa chave temporária corresponde somente ao APK gerado naquela mesma execução. Antes de distribuir builds futuras com OAuth, será necessário configurar uma chave de assinatura persistente e reutilizá-la em todos os builds.
