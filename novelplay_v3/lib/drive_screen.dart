@@ -887,6 +887,106 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _showEpisodePicker() async {
+    _hideControlsTimer?.cancel();
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: const Color(0xff17141f),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 42, height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 22),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('LISTA DE EPISÓDIOS',
+                          style: TextStyle(color: Color(0xffff83b0),
+                            fontSize: 10, letterSpacing: 1.8,
+                            fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 5),
+                        Text(widget.seriesName,
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 19,
+                            fontWeight: FontWeight.w900, color: Colors.white)),
+                      ],
+                    ),
+                  ),
+                  Text('${widget.episodes.length} episódios',
+                    style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Flexible(
+                child: GridView.builder(
+                  shrinkWrap: true,
+                  itemCount: widget.episodes.length,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 5,
+                    mainAxisSpacing: 10,
+                    crossAxisSpacing: 10,
+                    childAspectRatio: 1.12,
+                  ),
+                  itemBuilder: (_, i) {
+                    final episode = widget.episodes[i];
+                    final number = episode.number == 0 ? i + 1 : episode.number;
+                    final active = i == _index;
+                    return Material(
+                      color: active ? const Color(0xffff6b9d) : const Color(0xff292433),
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () => Navigator.pop(sheetContext, i),
+                        child: Center(
+                          child: Text('$number',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: active ? FontWeight.w900 : FontWeight.w700,
+                            )),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (selected != null && selected != _index) {
+      await _persistCurrentProgress();
+      await _pageController.animateToPage(
+        selected,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOut,
+      );
+    } else if (_controller != null && _controller!.value.isPlaying) {
+      _scheduleHidePlaybackControl();
+    }
+  }
+
   @override
   void dispose() {
     _persistCurrentProgress();
@@ -998,7 +1098,45 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
                 ],
               ),
             ),
-            if (_controller != null && _controller!.value.isInitialized)
+            if (_controller != null && _controller!.value.isInitialized) ...[
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 48,
+                child: Center(
+                  child: Material(
+                    color: const Color(0xdd17141f),
+                    borderRadius: BorderRadius.circular(16),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: _showEpisodePicker,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.video_library_rounded,
+                              color: Color(0xffff83b0), size: 19),
+                            const SizedBox(width: 9),
+                            Flexible(
+                              child: Text(
+                                '${widget.seriesName}  •  Episódio ${widget.episodes[_index].number == 0 ? _index + 1 : widget.episodes[_index].number}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Colors.white,
+                                  fontSize: 12, fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                            const SizedBox(width: 7),
+                            const Icon(Icons.keyboard_arrow_up_rounded,
+                              color: Colors.white70, size: 19),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
               Positioned(
                 left: 14,
                 right: 14,
@@ -1009,6 +1147,7 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
                   colors: const VideoProgressColors(playedColor: Color(0xffff6da8)),
                 ),
               ),
+            ],
           ],
         ),
       );
