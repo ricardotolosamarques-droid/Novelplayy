@@ -611,6 +611,33 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
                   ),
                 ),
               ),
+            if (!_loading && _error == null && _controller != null && _controller!.value.isInitialized)
+              Center(
+                child: Material(
+                  color: const Color(0x99000000),
+                  shape: const CircleBorder(
+                    side: BorderSide(color: Color(0x99ffffff), width: 1.5),
+                  ),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () {
+                      final player = _controller;
+                      if (player == null) return;
+                      player.value.isPlaying ? player.pause() : player.play();
+                      setState(() {});
+                    },
+                    child: SizedBox(
+                      width: 88,
+                      height: 88,
+                      child: Icon(
+                        _controller!.value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 58,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             SafeArea(
               child: Row(
                 children: [
@@ -622,18 +649,6 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
                     child: Text(
                       widget.episodes[_index].name,
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () {
-                      final player = _controller;
-                      if (player == null) return;
-                      player.value.isPlaying ? player.pause() : player.play();
-                      setState(() {});
-                    },
-                    icon: Icon(
-                      (_controller?.value.isPlaying ?? false) ? Icons.pause : Icons.play_arrow,
-                      color: Colors.white,
                     ),
                   ),
                 ],
