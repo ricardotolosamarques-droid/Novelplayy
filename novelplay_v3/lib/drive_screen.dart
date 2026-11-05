@@ -38,7 +38,7 @@ class WatchHistoryEntry {
     'episodeName': episodeName, 'positionMs': positionMs,
     'durationMs': durationMs, 'updatedAt': updatedAt,
   };
-  double get progress => durationMs <= 0 ? 0 : (positionMs / durationMs).clamp(0.0, 1.0);
+  double get progress => durationMs <= 0 ? 0.0 : (positionMs / durationMs).clamp(0.0, 1.0).toDouble();
 }
 
 class DriveEpisode {
@@ -612,10 +612,13 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                         borderRadius: BorderRadius.circular(17),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(17),
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => _DrivePlayerPage(
-                            episodes: episodes, initialIndex: i,
-                            seriesId: _selectedFolderId!, seriesName: _selectedSeriesName ?? 'Novelinha',
-                          ))),
+                          onTap: () async {
+                            await Navigator.push(context, MaterialPageRoute(builder: (_) => _DrivePlayerPage(
+                              episodes: episodes, initialIndex: i,
+                              seriesId: _selectedFolderId!, seriesName: _selectedSeriesName ?? 'Novelinha',
+                            )));
+                            if (mounted) setState(() => _historyFuture = _loadHistory());
+                          },
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
                             child: Row(
