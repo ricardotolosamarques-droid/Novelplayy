@@ -4,6 +4,7 @@ import 'catalog.dart';
 import 'dramabos_screen.dart';
 import 'dramabos_ui.dart';
 import 'drive_screen.dart';
+import 'auth.dart';
 
 void main() => runApp(const NovelPlay());
 
@@ -52,7 +53,7 @@ class NovelPlay extends StatelessWidget {
             ),
           ),
         ),
-        home: const DriveNovelScreen(),
+        home: const AuthGate(),
       );
 }
 
