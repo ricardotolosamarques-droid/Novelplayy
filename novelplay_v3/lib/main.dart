@@ -12,12 +12,45 @@ class NovelPlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'NovelPlay',
+        title: 'Novelinha',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           useMaterial3: true,
           brightness: Brightness.dark,
-          colorSchemeSeed: const Color(0xffdc467b),
+          scaffoldBackgroundColor: const Color(0xff101018),
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xffff6b9d),
+            brightness: Brightness.dark,
+            surface: const Color(0xff1b1b27),
+          ),
+          appBarTheme: const AppBarTheme(
+            backgroundColor: Color(0xff101018),
+            foregroundColor: Colors.white,
+            elevation: 0,
+            centerTitle: false,
+          ),
+          cardTheme: CardThemeData(
+            color: const Color(0xff1b1b27),
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+          navigationBarTheme: NavigationBarThemeData(
+            backgroundColor: const Color(0xff171720),
+            indicatorColor: const Color(0x33ff6b9d),
+            labelTextStyle: WidgetStateProperty.all(
+              const TextStyle(fontWeight: FontWeight.w700, fontSize: 11),
+            ),
+          ),
+          inputDecorationTheme: InputDecorationTheme(
+            filled: true,
+            fillColor: const Color(0xff1c1c29),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide.none,
+            ),
+          ),
         ),
         home: const DriveNovelScreen(),
       );
