@@ -853,7 +853,7 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
   void _onVideoChanged() {
     final player = _controller;
     if (player == null || !player.value.isInitialized) return;
-    if (DateTime.now().difference(_lastHistorySave).inSeconds >= 5) {
+    if (DateTime.now().difference(_lastHistorySave).inSeconds >= 2) {
       _lastHistorySave = DateTime.now();
       _persistCurrentProgress();
     }
@@ -889,10 +889,11 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
               scrollDirection: Axis.vertical,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: widget.episodes.length,
-              onPageChanged: (value) {
-                _persistCurrentProgress();
+              onPageChanged: (value) async {
+                await _persistCurrentProgress();
+                if (!mounted) return;
                 setState(() => _index = value);
-                _initialize();
+                await _initialize();
               },
               itemBuilder: (_, __) => const ColoredBox(color: Colors.black),
             ),
@@ -964,7 +965,10 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
               child: Row(
                 children: [
                   IconButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () async {
+                      await _persistCurrentProgress();
+                      if (mounted) Navigator.pop(context);
+                    },
                     icon: const Icon(Icons.arrow_back, color: Colors.white),
                   ),
                   Expanded(
