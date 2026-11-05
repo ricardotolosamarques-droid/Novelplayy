@@ -761,7 +761,7 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
       } catch (error) {
         apiError = error;
         await player.dispose();
-        player = VideoPlayerController.networkUrl(episode.directDownloadUri, headers: episode.resourceHeaders);
+        player = VideoPlayerController.networkUrl(episode.directDownloadUri, httpHeaders: episode.resourceHeaders);
         _controller = player;
         try {
           await player.initialize();
