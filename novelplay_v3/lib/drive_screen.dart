@@ -127,7 +127,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
         backgroundColor: const Color(0xff101018),
-        appBar: AppBar(
+        appBar: _selectedFolderId == null ? null : AppBar(
           backgroundColor: const Color(0xff101018),
           elevation: 0,
           leading: _selectedFolderId == null
