@@ -9,9 +9,10 @@ const _folderId = '1O28a3-3bmKkVj_3dS9HlWX0Owyn3eFts';
 const _apiKey = String.fromEnvironment('DRIVE_API_KEY');
 
 class DriveSeries {
-  const DriveSeries(this.id, this.name);
+  const DriveSeries(this.id, this.name, {this.coverId});
   final String id;
   final String name;
+  final String? coverId;
 }
 
 class DriveEpisode {
@@ -81,7 +82,20 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
         .map((file) => DriveSeries(file['id'] as String, (file['name'] as String?) ?? 'Série sem nome'))
         .toList()
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-    return folders;
+
+    // Uma imagem dentro da pasta da série pode ser usada como pôster.
+    return Future.wait(folders.map((series) async {
+      try {
+        final children = await _listChildren(series.id);
+        final covers = children.where((file) =>
+            (file['mimeType'] as String? ?? '').startsWith('image/'));
+        if (covers.isEmpty) return series;
+        final cover = covers.first;
+        return DriveSeries(series.id, series.name, coverId: cover['id'] as String?);
+      } catch (_) {
+        return series;
+      }
+    }));
   }
 
   Future<List<DriveEpisode>> _loadEpisodes(String folderId) async {
@@ -190,7 +204,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
               if (allSeries.isEmpty) {
                 return _DriveMessage(
                   title: 'Nenhuma série encontrada',
-                  message: 'Crie uma pasta para cada novelinha dentro da pasta principal do Google Drive. O nome da pasta será o nome da série.',
+                  message: 'Crie uma pasta para cada novelinha dentro da pasta principal do Google Drive. O nome da pasta será o nome da série. Para usar um pôster, coloque uma imagem dentro da pasta da série junto com os episódios.',
                   onRetry: _refresh,
                 );
               }
@@ -332,10 +346,48 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                               child: Stack(
                                 fit: StackFit.expand,
                                 children: [
-                                  DecoratedBox(decoration: BoxDecoration(
-                                    gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [colors[0], colors[1], const Color(0xff17141e)]),
-                                  )),
-                                  Positioned(top: 18, left: 0, right: 0, child: Icon(Icons.movie_filter_rounded, size: 104, color: const Color(0x33ffffff))),
+                                  if (item.coverId != null)
+                                    Positioned.fill(
+                                      child: Image.network(
+                                        'https://drive.google.com/uc?export=view&id=${item.coverId}',
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) => DecoratedBox(
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              begin: Alignment.topCenter,
+                                              end: Alignment.bottomCenter,
+                                              colors: [colors[0], colors[1], const Color(0xff17141e)],
+                                            ),
+                                          ),
+                                          child: const Icon(Icons.movie_filter_rounded, size: 104, color: Color(0x33ffffff)),
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    Positioned.fill(
+                                      child: DecoratedBox(
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            begin: Alignment.topCenter,
+                                            end: Alignment.bottomCenter,
+                                            colors: [colors[0], colors[1], const Color(0xff17141e)],
+                                          ),
+                                        ),
+                                        child: const Icon(Icons.movie_filter_rounded, size: 104, color: Color(0x33ffffff)),
+                                      ),
+                                    ),
+                                  const Positioned.fill(
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                          colors: [Color(0x00000000), Color(0x22000000), Color(0xee09070d)],
+                                          stops: [0.25, 0.55, 1],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                   Positioned(top: 12, left: 12, child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                                     decoration: BoxDecoration(color: const Color(0x44000000), borderRadius: BorderRadius.circular(20)),
