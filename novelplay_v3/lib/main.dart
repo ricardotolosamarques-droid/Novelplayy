@@ -19,7 +19,7 @@ class NovelPlay extends StatelessWidget {
           brightness: Brightness.dark,
           colorSchemeSeed: const Color(0xffdc467b),
         ),
-        home: const NovelPlayTabs(),
+        home: const DriveNovelScreen(),
       );
 }
 
