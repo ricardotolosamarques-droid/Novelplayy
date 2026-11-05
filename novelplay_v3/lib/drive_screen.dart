@@ -174,131 +174,173 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                 );
               }
               return RefreshIndicator(
-                color: const Color(0xffff6b9d),
+                color: const Color(0xffff5b9a),
                 onRefresh: _refresh,
                 child: ListView(
-                  padding: const EdgeInsets.fromLTRB(18, 10, 18, 28),
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
                   children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 42, height: 42,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(colors: [Color(0xffff6da8), Color(0xff9c3f83)]),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 29),
+                        ),
+                        const SizedBox(width: 11),
+                        const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('NOVELINHA', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, letterSpacing: 2.0)),
+                            Text('HISTÓRIAS QUE PRENDEM', style: TextStyle(fontSize: 8, color: Color(0xffff8db8), letterSpacing: 1.6, fontWeight: FontWeight.w800)),
+                          ],
+                        ),
+                        const Spacer(),
+                        Container(
+                          decoration: BoxDecoration(color: const Color(0xff211c2a), borderRadius: BorderRadius.circular(14)),
+                          child: IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh_rounded, color: Colors.white70), tooltip: 'Atualizar'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 27),
+                    const Text('SEU PRÓXIMO VÍCIO', style: TextStyle(color: Color(0xffff83b0), fontSize: 10, letterSpacing: 2.0, fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 8),
+                    const Text('Uma história\npara maratonar.', style: TextStyle(fontSize: 31, height: 1.04, fontWeight: FontWeight.w900, letterSpacing: -0.8)),
+                    const SizedBox(height: 9),
+                    Text('${series.length} histórias esperando por você', style: const TextStyle(color: Color(0xffaaa4b4), fontSize: 13)),
+                    const SizedBox(height: 20),
                     Container(
-                      padding: const EdgeInsets.all(22),
+                      height: 174,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(24),
                         gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xff702b59), Color(0xff30203f), Color(0xff1b1b2b)],
+                          begin: Alignment.topLeft, end: Alignment.bottomRight,
+                          colors: [Color(0xff9d3d70), Color(0xff512b59), Color(0xff211c32)],
                         ),
+                        boxShadow: const [BoxShadow(color: Color(0x553f1738), blurRadius: 22, offset: Offset(0, 10))],
                       ),
+                      clipBehavior: Clip.antiAlias,
                       child: Stack(
                         children: [
-                          const Positioned(right: 0, top: 0, child: Icon(Icons.auto_awesome_rounded, size: 54, color: Color(0x55ffffff))),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                decoration: BoxDecoration(color: const Color(0x33ffffff), borderRadius: BorderRadius.circular(30)),
-                                child: const Text('SEU UNIVERSO DE HISTÓRIAS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.1)),
-                              ),
-                              const SizedBox(height: 18),
-                              const Text('Qual vai ser\n a próxima história?', style: TextStyle(fontSize: 27, height: 1.12, fontWeight: FontWeight.w900)),
-                              const SizedBox(height: 12),
-                              Text('${series.length} séries disponíveis', style: const TextStyle(color: Color(0xffe5cbd9), fontSize: 13)),
-                            ],
+                          const Positioned(right: -8, top: -28, child: Icon(Icons.local_movies_rounded, size: 190, color: Color(0x22ffffff))),
+                          Positioned(right: 18, bottom: 16, child: Transform.rotate(angle: -0.12, child: const Icon(Icons.auto_awesome, size: 68, color: Color(0x55ffffff)))),
+                          Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(color: const Color(0x33ffffff), borderRadius: BorderRadius.circular(30)),
+                                  child: const Text('CATÁLOGO EXCLUSIVO', style: TextStyle(fontSize: 9, letterSpacing: 1.4, fontWeight: FontWeight.w900)),
+                                ),
+                                const SizedBox(height: 12),
+                                const Text('Drama, romance\ne reviravoltas.', style: TextStyle(fontSize: 23, height: 1.05, fontWeight: FontWeight.w900)),
+                                const SizedBox(height: 9),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.play_circle_fill_rounded, size: 17, color: Color(0xffffc4da)),
+                                    const SizedBox(width: 6),
+                                    Text('${series.length} títulos para descobrir', style: const TextStyle(fontSize: 11, color: Color(0xfff4dce8))),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 22),
+                    const SizedBox(height: 24),
                     TextField(
                       onChanged: (value) => setState(() => _searchQuery = value),
-                      style: const TextStyle(color: Colors.white),
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
                       decoration: InputDecoration(
-                        hintText: 'Buscar novelinhas...',
-                        hintStyle: const TextStyle(color: Colors.white54),
-                        prefixIcon: const Icon(Icons.search_rounded, color: Color(0xffff8bb3)),
-                        filled: true,
-                        fillColor: const Color(0xff1c1c29),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 15),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                        hintText: 'Qual história você procura?',
+                        hintStyle: const TextStyle(color: Color(0xff827c8c), fontSize: 13),
+                        prefixIcon: const Icon(Icons.search_rounded, color: Color(0xffff78aa)),
+                        filled: true, fillColor: const Color(0xff211e2a),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 17),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(17), borderSide: const BorderSide(color: Color(0xff302a39))),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(17), borderSide: const BorderSide(color: Color(0xffff6b9d), width: 1.2)),
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 26),
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const Expanded(child: Text('Explorar séries', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800))),
-                        Text('${series.length} títulos', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                        const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('EXPLORE', style: TextStyle(color: Color(0xffff83b0), fontSize: 9, letterSpacing: 2, fontWeight: FontWeight.w900)),
+                          SizedBox(height: 4),
+                          Text('Todas as novelinhas', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.4)),
+                        ])),
+                        Text('${series.length} títulos', style: const TextStyle(color: Color(0xff918b9b), fontSize: 11)),
                       ],
                     ),
-                    const SizedBox(height: 14),
-                    GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: series.length,
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                        childAspectRatio: 0.82,
-                      ),
-                      itemBuilder: (context, index) {
-                        final item = series[index];
-                        const palettes = [
-                          [Color(0xff74365f), Color(0xff30213f)],
-                          [Color(0xff344d70), Color(0xff1b263c)],
-                          [Color(0xff80502f), Color(0xff392638)],
-                          [Color(0xff315c58), Color(0xff1c303b)],
-                        ];
-                        final colors = palettes[index % palettes.length];
-                        return Material(
-                          color: const Color(0xff1b1b27),
-                          borderRadius: BorderRadius.circular(20),
-                          clipBehavior: Clip.antiAlias,
-                          child: InkWell(
-                            onTap: () => _openSeries(item),
-                            child: Ink(
-                              decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: colors)),
+                    const SizedBox(height: 15),
+                    if (series.isEmpty)
+                      const Padding(padding: EdgeInsets.all(24), child: Text('Nenhuma novelinha encontrada.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)))
+                    else
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: series.length,
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2, crossAxisSpacing: 13, mainAxisSpacing: 15, childAspectRatio: 0.69,
+                        ),
+                        itemBuilder: (context, index) {
+                          final item = series[index];
+                          const palettes = [
+                            [Color(0xffa84d79), Color(0xff382039)],
+                            [Color(0xff426b8d), Color(0xff1b293e)],
+                            [Color(0xffa16a42), Color(0xff392338)],
+                            [Color(0xff477b70), Color(0xff1b3038)],
+                            [Color(0xff8056a0), Color(0xff30213e)],
+                            [Color(0xff9b5360), Color(0xff34202d)],
+                          ];
+                          final colors = palettes[index % palettes.length];
+                          final isFavorite = _favoriteIds.contains(item.id);
+                          return Material(
+                            color: const Color(0xff211e2a),
+                            borderRadius: BorderRadius.circular(19),
+                            clipBehavior: Clip.antiAlias,
+                            child: InkWell(
+                              onTap: () => _openSeries(item),
                               child: Stack(
+                                fit: StackFit.expand,
                                 children: [
-                                  const Positioned(right: -12, top: 10, child: Icon(Icons.movie_creation_outlined, size: 94, color: Color(0x22ffffff))),
-                                  Positioned(
-                                    right: 10,
-                                    top: 10,
-                                    child: IconButton.filledTonal(
-                                      visualDensity: VisualDensity.compact,
-                                      style: IconButton.styleFrom(backgroundColor: const Color(0x33000000)),
-                                      onPressed: () => setState(() {
-                                        if (!_favoriteIds.add(item.id)) _favoriteIds.remove(item.id);
-                                      }),
-                                      icon: Icon(_favoriteIds.contains(item.id) ? Icons.favorite : Icons.favorite_border, color: const Color(0xffff8bb3), size: 19),
-                                    ),
-                                  ),
-                                  Positioned(
-                                    left: 14,
-                                    right: 14,
-                                    bottom: 15,
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.all(9),
-                                          decoration: BoxDecoration(color: const Color(0x33ffffff), borderRadius: BorderRadius.circular(12)),
-                                          child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 22),
-                                        ),
-                                        const SizedBox(height: 13),
-                                        Text(item.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, height: 1.1)),
-                                        const SizedBox(height: 5),
-                                        const Text('TOQUE PARA ASSISTIR', style: TextStyle(fontSize: 9, letterSpacing: 1, color: Color(0xffe6dbe5))),
-                                      ],
-                                    ),
-                                  ),
+                                  DecoratedBox(decoration: BoxDecoration(
+                                    gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [colors[0], colors[1], const Color(0xff17141e)]),
+                                  )),
+                                  Positioned(top: 18, left: 0, right: 0, child: Icon(Icons.movie_filter_rounded, size: 104, color: const Color(0x33ffffff))),
+                                  Positioned(top: 12, left: 12, child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                    decoration: BoxDecoration(color: const Color(0x44000000), borderRadius: BorderRadius.circular(20)),
+                                    child: const Text('SÉRIE', style: TextStyle(fontSize: 8, letterSpacing: 1.2, fontWeight: FontWeight.w900)),
+                                  )),
+                                  Positioned(top: 5, right: 5, child: IconButton(
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: () => setState(() { if (! _favoriteIds.add(item.id)) _favoriteIds.remove(item.id); }),
+                                    icon: Icon(isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: isFavorite ? const Color(0xffff79aa) : Colors.white, size: 20),
+                                  )),
+                                  Positioned(left: 13, right: 13, bottom: 14, child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Container(width: 32, height: 32, decoration: BoxDecoration(color: const Color(0xffff6b9d), borderRadius: BorderRadius.circular(11)), child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 23)),
+                                      const SizedBox(height: 11),
+                                      Text(item.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, height: 1.12, fontWeight: FontWeight.w900)),
+                                      const SizedBox(height: 5),
+                                      const Text('ASSISTIR AGORA  ›', style: TextStyle(fontSize: 8, letterSpacing: 1.1, color: Color(0xfff5c9dc), fontWeight: FontWeight.w800)),
+                                    ],
+                                  )),
                                 ],
                               ),
                             ),
-                          ),
-                        );
-                      },
-                    ),
+                          );
+                        },
+                      ),
                   ],
                 ),
               );
