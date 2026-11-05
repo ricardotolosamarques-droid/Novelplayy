@@ -112,4 +112,13 @@ O workflow injeta a chave no build usando `--dart-define`; a chave não é grava
 
 A tela **Meu Drive** ainda usa a chave `DRIVE_API_KEY` e consulta uma pasta compartilhada publicamente. Isso **não é ainda a integração OAuth Google com escopo somente leitura** definida para a versão final. A migração para login Google e token OAuth `drive.readonly` permanece pendente; não considere a integração autenticada concluída.
 
-O workflow **Preparar Android e obter SHA-1 do Novelinha** foi corrigido para criar um keystore de depuração antes de executar `signingReport` e falhar caso o SHA-1 não apareça. O SHA-1 produzido por essa chave temporária corresponde somente ao APK gerado naquela mesma execução. Antes de distribuir builds futuras com OAuth, será necessário configurar uma chave de assinatura persistente e reutilizá-la em todos os builds.
+O workflow **Preparar Android e obter SHA-1 do Novelinha** foi corrigido para criar um keystore de depuração antes de executar `signingReport` e falhar caso o SHA-1 não apareça. O workflow principal de APK também gera e exibe o SHA-1 da assinatura usada no APK ARM64.
+
+
+
+### Package Android e correspondência do SHA-1
+
+Os workflows de Android usam o identificador `com.example.novelinha_app`. Para configurar o OAuth de um APK, use o SHA-1 e instale o APK produzidos **pela mesma execução** do workflow; não misture o fingerprint de uma execução com o APK de outra. O workflow principal **Gerar NovelPlay v3 (APK)** exibe o SHA-1 antes de compilar o APK ARM64.
+
+A chave de depuração criada no CI é temporária. O fingerprint pode mudar na próxima execução. Para atualizações contínuas com o mesmo cliente OAuth, ainda será preciso adotar uma chave persistente protegida por secret do GitHub.
+
