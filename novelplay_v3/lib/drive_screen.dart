@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -489,6 +490,8 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
   late int _index;
   VideoPlayerController? _controller;
   bool _loading = true;
+  bool _showPlaybackControl = true;
+  Timer? _hideControlsTimer;
   String? _error;
 
   @override
@@ -515,7 +518,10 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
       await player.initialize();
       player.addListener(_onVideoChanged);
       await player.play();
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() { _loading = false; _showPlaybackControl = true; });
+        _scheduleHidePlaybackControl();
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -523,6 +529,28 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
           _error = 'O Google Drive não liberou a reprodução direta deste arquivo. Verifique se ele está público e se a API permite download. Detalhe: $e';
         });
       }
+    }
+  }
+
+  void _scheduleHidePlaybackControl() {
+    _hideControlsTimer?.cancel();
+    _hideControlsTimer = Timer(const Duration(milliseconds: 900), () {
+      if (!mounted || _controller == null || !_controller!.value.isPlaying) return;
+      setState(() => _showPlaybackControl = false);
+    });
+  }
+
+  void _togglePlayback() {
+    final player = _controller;
+    if (player == null) return;
+    if (player.value.isPlaying) {
+      _hideControlsTimer?.cancel();
+      player.pause();
+      setState(() => _showPlaybackControl = true);
+    } else {
+      player.play();
+      setState(() => _showPlaybackControl = true);
+      _scheduleHidePlaybackControl();
     }
   }
 
@@ -553,6 +581,7 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
 
   @override
   void dispose() {
+    _hideControlsTimer?.cancel();
     _controller?.removeListener(_onVideoChanged);
     _controller?.dispose();
     _pageController.dispose();
@@ -611,7 +640,7 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
                   ),
                 ),
               ),
-            if (!_loading && _error == null && _controller != null && _controller!.value.isInitialized)
+            if (!_loading && _error == null && _controller != null && _controller!.value.isInitialized && _showPlaybackControl)
               Center(
                 child: Material(
                   color: const Color(0x99000000),
@@ -620,12 +649,7 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
                   ),
                   child: InkWell(
                     customBorder: const CircleBorder(),
-                    onTap: () {
-                      final player = _controller;
-                      if (player == null) return;
-                      player.value.isPlaying ? player.pause() : player.play();
-                      setState(() {});
-                    },
+                    onTap: _togglePlayback,
                     child: SizedBox(
                       width: 88,
                       height: 88,
