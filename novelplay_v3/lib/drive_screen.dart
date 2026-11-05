@@ -7,6 +7,12 @@ import 'package:video_player/video_player.dart';
 const _folderId = '1O28a3-3bmKkVj_3dS9HlWX0Owyn3eFts';
 const _apiKey = String.fromEnvironment('DRIVE_API_KEY');
 
+class DriveSeries {
+  const DriveSeries(this.id, this.name);
+  final String id;
+  final String name;
+}
+
 class DriveEpisode {
   const DriveEpisode(this.id, this.name, this.mimeType);
   final String id;
@@ -33,30 +39,50 @@ class DriveNovelScreen extends StatefulWidget {
 }
 
 class _DriveNovelScreenState extends State<DriveNovelScreen> {
-  late Future<List<DriveEpisode>> _episodes = _loadEpisodes();
+  String? _selectedFolderId;
+  String? _selectedSeriesName;
+  late Future<List<dynamic>> _content = _loadSeries();
 
-  Future<List<DriveEpisode>> _loadEpisodes() async {
+  Future<List<Map<String, dynamic>>> _listChildren(String parentId) async {
+    final allFiles = <Map<String, dynamic>>[];
+    String? pageToken;
+    do {
+      final params = <String, String>{
+        'q': "'$parentId' in parents and trashed = false",
+        'key': _apiKey,
+        'pageSize': '1000',
+        'orderBy': 'name',
+        'fields': 'files(id,name,mimeType),nextPageToken',
+      };
+      if (pageToken != null) params['pageToken'] = pageToken;
+      final uri = Uri.https('www.googleapis.com', '/drive/v3/files', params);
+      final response = await http.get(uri).timeout(const Duration(seconds: 25));
+      if (response.statusCode != 200) {
+        throw Exception('Google Drive HTTP \${response.statusCode}: \${response.body}');
+      }
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      allFiles.addAll((data['files'] as List<dynamic>? ?? []).whereType<Map<String, dynamic>>());
+      pageToken = data['nextPageToken'] as String?;
+    } while (pageToken != null);
+    return allFiles;
+  }
+
+  Future<List<DriveSeries>> _loadSeries() async {
     if (_apiKey.isEmpty) {
       throw Exception('A chave DRIVE_API_KEY ainda não foi configurada na compilação. Veja as instruções no README.');
     }
+    final files = await _listChildren(_folderId);
+    final folders = files
+        .where((file) => file['mimeType'] == 'application/vnd.google-apps.folder')
+        .map((file) => DriveSeries(file['id'] as String, (file['name'] as String?) ?? 'Série sem nome'))
+        .toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return folders;
+  }
 
-    final query = "'$_folderId' in parents and trashed = false";
-    final uri = Uri.https('www.googleapis.com', '/drive/v3/files', {
-      'q': query,
-      'key': _apiKey,
-      'pageSize': '1000',
-      'orderBy': 'name',
-      'fields': 'files(id,name,mimeType),nextPageToken',
-    });
-
-    final response = await http.get(uri).timeout(const Duration(seconds: 25));
-    if (response.statusCode != 200) {
-      throw Exception('Google Drive HTTP ${response.statusCode}: ${response.body}');
-    }
-
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final files = (data['files'] as List<dynamic>? ?? [])
-        .whereType<Map<String, dynamic>>()
+  Future<List<DriveEpisode>> _loadEpisodes(String folderId) async {
+    final files = await _listChildren(folderId);
+    final episodes = files
         .where((file) => (file['mimeType'] as String? ?? '').startsWith('video/'))
         .map((file) => DriveEpisode(
               file['id'] as String,
@@ -64,37 +90,55 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
               (file['mimeType'] as String?) ?? '',
             ))
         .toList();
-
-    files.sort((a, b) {
+    episodes.sort((a, b) {
       final byNumber = a.number.compareTo(b.number);
-      return byNumber != 0
-          ? byNumber
-          : a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      return byNumber != 0 ? byNumber : a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
-    return files;
+    return episodes;
+  }
+
+  void _openSeries(DriveSeries series) {
+    setState(() {
+      _selectedFolderId = series.id;
+      _selectedSeriesName = series.name;
+      _content = _loadEpisodes(series.id);
+    });
+  }
+
+  void _goBackToSeries() {
+    setState(() {
+      _selectedFolderId = null;
+      _selectedSeriesName = null;
+      _content = _loadSeries();
+    });
   }
 
   Future<void> _refresh() async {
-    setState(() => _episodes = _loadEpisodes());
+    setState(() {
+      _content = _selectedFolderId == null ? _loadSeries() : _loadEpisodes(_selectedFolderId!);
+    });
     try {
-      await _episodes;
+      await _content;
     } catch (_) {}
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
-          title: const Text('Minha novelinha'),
+          leading: _selectedFolderId == null
+              ? null
+              : IconButton(
+                  tooltip: 'Voltar às séries',
+                  onPressed: _goBackToSeries,
+                  icon: const Icon(Icons.arrow_back),
+                ),
+          title: Text(_selectedSeriesName ?? 'Minhas novelinhas'),
           actions: [
-            IconButton(
-              tooltip: 'Atualizar episódios do Drive',
-              onPressed: _refresh,
-              icon: const Icon(Icons.refresh),
-            ),
+            IconButton(tooltip: 'Atualizar Google Drive', onPressed: _refresh, icon: const Icon(Icons.refresh)),
           ],
         ),
-        body: FutureBuilder<List<DriveEpisode>>(
-          future: _episodes,
+        body: FutureBuilder<List<dynamic>>(
+          future: _content,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -106,11 +150,58 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                 onRetry: _refresh,
               );
             }
-            final episodes = snapshot.data ?? [];
+            final items = snapshot.data ?? [];
+            if (_selectedFolderId == null) {
+              final series = items.cast<DriveSeries>();
+              if (series.isEmpty) {
+                return _DriveMessage(
+                  title: 'Nenhuma série encontrada',
+                  message: 'Crie uma pasta para cada novelinha dentro da pasta principal do Google Drive. O nome da pasta será o nome da série.',
+                  onRetry: _refresh,
+                );
+              }
+              return RefreshIndicator(
+                onRefresh: _refresh,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(18),
+                        gradient: const LinearGradient(colors: [Color(0xff8d2856), Color(0xff392044)]),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('GOOGLE DRIVE', style: TextStyle(letterSpacing: 1.4)),
+                          const SizedBox(height: 8),
+                          const Text('Minhas novelinhas', style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold)),
+                          Text('\${series.length} séries encontradas'),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    for (final seriesItem in series)
+                      Card(
+                        child: ListTile(
+                          leading: const CircleAvatar(child: Icon(Icons.video_library)),
+                          title: Text(seriesItem.name),
+                          subtitle: const Text('Abrir episódios'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => _openSeries(seriesItem),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            }
+
+            final episodes = items.cast<DriveEpisode>();
             if (episodes.isEmpty) {
               return _DriveMessage(
-                title: 'Nenhum vídeo encontrado',
-                message: 'Coloque os vídeos na pasta compartilhada do Drive e atualize a lista.',
+                title: 'Nenhum episódio encontrado',
+                message: 'Coloque os vídeos dentro da pasta "\${_selectedSeriesName ?? 'da série'}" e atualize a lista.',
                 onRetry: _refresh,
               );
             }
@@ -123,17 +214,15 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(18),
-                      gradient: const LinearGradient(
-                        colors: [Color(0xff8d2856), Color(0xff392044)],
-                      ),
+                      gradient: const LinearGradient(colors: [Color(0xff8d2856), Color(0xff392044)]),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('GOOGLE DRIVE', style: TextStyle(letterSpacing: 1.4)),
+                        const Text('SÉRIE', style: TextStyle(letterSpacing: 1.4)),
                         const SizedBox(height: 8),
-                        const Text('Seus episódios', style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold)),
-                        Text('${episodes.length} vídeos encontrados'),
+                        Text(_selectedSeriesName ?? 'Episódios', style: const TextStyle(fontSize: 25, fontWeight: FontWeight.bold)),
+                        Text('\${episodes.length} episódios encontrados'),
                       ],
                     ),
                   ),
@@ -141,18 +230,13 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                   for (var i = 0; i < episodes.length; i++)
                     Card(
                       child: ListTile(
-                        leading: CircleAvatar(child: Text('${episodes[i].number == 0 ? i + 1 : episodes[i].number}')),
+                        leading: CircleAvatar(child: Text('\${episodes[i].number == 0 ? i + 1 : episodes[i].number}')),
                         title: Text(episodes[i].name),
                         subtitle: const Text('Assistir'),
                         trailing: const Icon(Icons.play_circle_outline),
                         onTap: () => Navigator.push(
                           context,
-                          MaterialPageRoute(
-                            builder: (_) => _DrivePlayerPage(
-                              episodes: episodes,
-                              initialIndex: i,
-                            ),
-                          ),
+                          MaterialPageRoute(builder: (_) => _DrivePlayerPage(episodes: episodes, initialIndex: i)),
                         ),
                       ),
                     ),
