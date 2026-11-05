@@ -246,7 +246,9 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                     const SizedBox(height: 9),
                     Text('${series.length} histórias esperando por você', style: const TextStyle(color: Color(0xffaaa4b4), fontSize: 13)),
                     if (_tabIndex != 2) const SizedBox(height: 20),
-                    if (_tabIndex != 2) Container(
+                    if (_tabIndex != 2) GestureDetector(
+                      onTap: series.isEmpty ? null : () => _openSeries(series.first),
+                      child: Container(
                       height: 174,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(24),
@@ -258,7 +260,23 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                       ),
                       clipBehavior: Clip.antiAlias,
                       child: Stack(
+                        fit: StackFit.expand,
                         children: [
+                          if (series.isNotEmpty && series.first.coverId != null)
+                            Image.network(
+                              'https://drive.google.com/uc?export=view&id=${series.first.coverId}',
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xff512b59)),
+                            ),
+                          const DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.centerRight,
+                                end: Alignment.centerLeft,
+                                colors: [Color(0x22000000), Color(0xdd09070d)],
+                              ),
+                            ),
+                          ),
                           const Positioned(right: -8, top: -28, child: Icon(Icons.local_movies_rounded, size: 190, color: Color(0x22ffffff))),
                           Positioned(right: 18, bottom: 16, child: Transform.rotate(angle: -0.12, child: const Icon(Icons.auto_awesome, size: 68, color: Color(0x55ffffff)))),
                           Padding(
@@ -273,7 +291,12 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                                   child: const Text('CATÁLOGO EXCLUSIVO', style: TextStyle(fontSize: 9, letterSpacing: 1.4, fontWeight: FontWeight.w900)),
                                 ),
                                 const SizedBox(height: 12),
-                                const Text('Drama, romance\ne reviravoltas.', style: TextStyle(fontSize: 23, height: 1.05, fontWeight: FontWeight.w900)),
+                                Text(
+                                  series.isEmpty ? 'Drama, romance\ne reviravoltas.' : series.first.name,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 23, height: 1.05, fontWeight: FontWeight.w900),
+                                ),
                                 const SizedBox(height: 9),
                                 Row(
                                   children: [
@@ -287,6 +310,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                           ),
                         ],
                       ),
+                    ),
                     ),
                     if (_tabIndex != 2) const SizedBox(height: 24),
                     if (_tabIndex != 2) TextField(
