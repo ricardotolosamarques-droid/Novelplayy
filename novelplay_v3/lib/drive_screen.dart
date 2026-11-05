@@ -327,7 +327,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                         future: _historyFuture,
                         builder: (context, snapshot) {
                           final history = snapshot.data ?? [];
-                          if (history.isEmpty) return const SizedBox.shrink();
+                          // Mantém a seção visível mesmo quando ainda não há progresso salvo.
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -337,7 +337,24 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                               const SizedBox(height: 12),
                               SizedBox(
                                 height: 116,
-                                child: ListView.separated(
+                                child: history.isEmpty
+                                    ? Container(
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xff211e2a),
+                                          borderRadius: BorderRadius.circular(16),
+                                          border: Border.all(color: Colors.white10),
+                                        ),
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                        child: const Row(children: [
+                                          Icon(Icons.play_circle_outline_rounded, color: Color(0xffff83b0), size: 34),
+                                          SizedBox(width: 12),
+                                          Expanded(child: Text(
+                                            'Assista a uma série e seu progresso aparecerá aqui.',
+                                            style: TextStyle(color: Colors.white70, fontSize: 12),
+                                          )),
+                                        ]),
+                                      )
+                                    : ListView.separated(
                                   scrollDirection: Axis.horizontal,
                                   itemCount: history.length,
                                   separatorBuilder: (_, __) => const SizedBox(width: 11),
