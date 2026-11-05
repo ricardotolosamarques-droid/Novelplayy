@@ -297,7 +297,11 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
               Center(
                 child: AspectRatio(
                   aspectRatio: _controller!.value.aspectRatio,
-                  child: VideoPlayer(_controller!),
+                  // O vídeo não deve capturar os gestos: o PageView vertical,
+                  // que fica por trás, precisa receber o swipe para trocar de episódio.
+                  child: IgnorePointer(
+                    child: VideoPlayer(_controller!),
+                  ),
                 ),
               ),
             SafeArea(
