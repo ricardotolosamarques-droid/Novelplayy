@@ -322,95 +322,6 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                     const Text('Uma história\npara maratonar.', style: TextStyle(fontSize: 31, height: 1.04, fontWeight: FontWeight.w900, letterSpacing: -0.8)),
                     const SizedBox(height: 9),
                     Text('${series.length} histórias esperando por você', style: const TextStyle(color: Color(0xffaaa4b4), fontSize: 13)),
-                    if (_tabIndex == 0)
-                      FutureBuilder<List<WatchHistoryEntry>>(
-                        future: _historyFuture,
-                        builder: (context, snapshot) {
-                          final history = snapshot.data ?? [];
-                          // Mantém a seção visível mesmo quando ainda não há progresso salvo.
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 22),
-                              const Text('CONTINUE ASSISTINDO',
-                                style: TextStyle(color: Color(0xffff83b0), fontSize: 10, letterSpacing: 1.8, fontWeight: FontWeight.w900)),
-                              const SizedBox(height: 12),
-                              SizedBox(
-                                height: 116,
-                                child: history.isEmpty
-                                    ? Container(
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xff211e2a),
-                                          borderRadius: BorderRadius.circular(16),
-                                          border: Border.all(color: Colors.white10),
-                                        ),
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                        child: const Row(children: [
-                                          Icon(Icons.play_circle_outline_rounded, color: Color(0xffff83b0), size: 34),
-                                          SizedBox(width: 12),
-                                          Expanded(child: Text(
-                                            'Assista a uma série e seu progresso aparecerá aqui.',
-                                            style: TextStyle(color: Colors.white70, fontSize: 12),
-                                          )),
-                                        ]),
-                                      )
-                                    : ListView.separated(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: history.length,
-                                  separatorBuilder: (_, __) => const SizedBox(width: 11),
-                                  itemBuilder: (context, index) {
-                                    final entry = history[index];
-                                    return SizedBox(
-                                      width: 258,
-                                      child: Material(
-                                        color: const Color(0xff211e2a),
-                                        borderRadius: BorderRadius.circular(16),
-                                        clipBehavior: Clip.antiAlias,
-                                        child: InkWell(
-                                          onTap: () => _resumeHistory(entry),
-                                          child: Padding(
-                                            padding: const EdgeInsets.all(12),
-                                            child: Row(children: [
-                                              Container(
-                                                width: 58, height: 82,
-                                                decoration: BoxDecoration(
-                                                  borderRadius: BorderRadius.circular(10),
-                                                  gradient: const LinearGradient(colors: [Color(0xffa84d79), Color(0xff382039)]),
-                                                ),
-                                                child: const Icon(Icons.play_circle_fill_rounded, color: Colors.white, size: 30),
-                                              ),
-                                              const SizedBox(width: 11),
-                                              Expanded(child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                mainAxisAlignment: MainAxisAlignment.center,
-                                                children: [
-                                                  Text(entry.seriesName, maxLines: 1, overflow: TextOverflow.ellipsis,
-                                                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
-                                                  const SizedBox(height: 5),
-                                                  Text(entry.episodeName, maxLines: 1, overflow: TextOverflow.ellipsis,
-                                                    style: const TextStyle(color: Colors.white70, fontSize: 11)),
-                                                  const SizedBox(height: 9),
-                                                  ClipRRect(borderRadius: BorderRadius.circular(8),
-                                                    child: LinearProgressIndicator(value: entry.progress, minHeight: 4,
-                                                      backgroundColor: Colors.white12,
-                                                      valueColor: const AlwaysStoppedAnimation(Color(0xffff6b9d)))),
-                                                  const SizedBox(height: 5),
-                                                  const Text('TOQUE PARA CONTINUAR',
-                                                    style: TextStyle(color: Color(0xffff91b8), fontSize: 8, letterSpacing: 0.8, fontWeight: FontWeight.w900)),
-                                                ],
-                                              )),
-                                            ]),
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
                     if (_tabIndex != 2) const SizedBox(height: 20),
                     if (_tabIndex != 2) GestureDetector(
                       onTap: series.isEmpty ? null : () => _openSeries(series.first),
@@ -601,6 +512,96 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                                 ],
                               ),
                             ),
+                          );
+                        },
+                      ),
+                    const SizedBox(height: 24),
+                    if (_tabIndex == 0)
+                      FutureBuilder<List<WatchHistoryEntry>>(
+                        future: _historyFuture,
+                        builder: (context, snapshot) {
+                          final history = snapshot.data ?? [];
+                          // Mantém a seção visível mesmo quando ainda não há progresso salvo.
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 22),
+                              const Text('CONTINUE ASSISTINDO',
+                                style: TextStyle(color: Color(0xffff83b0), fontSize: 10, letterSpacing: 1.8, fontWeight: FontWeight.w900)),
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                height: 116,
+                                child: history.isEmpty
+                                    ? Container(
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xff211e2a),
+                                          borderRadius: BorderRadius.circular(16),
+                                          border: Border.all(color: Colors.white10),
+                                        ),
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                        child: const Row(children: [
+                                          Icon(Icons.play_circle_outline_rounded, color: Color(0xffff83b0), size: 34),
+                                          SizedBox(width: 12),
+                                          Expanded(child: Text(
+                                            'Assista a uma série e seu progresso aparecerá aqui.',
+                                            style: TextStyle(color: Colors.white70, fontSize: 12),
+                                          )),
+                                        ]),
+                                      )
+                                    : ListView.separated(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: history.length,
+                                  separatorBuilder: (_, __) => const SizedBox(width: 11),
+                                  itemBuilder: (context, index) {
+                                    final entry = history[index];
+                                    return SizedBox(
+                                      width: 258,
+                                      child: Material(
+                                        color: const Color(0xff211e2a),
+                                        borderRadius: BorderRadius.circular(16),
+                                        clipBehavior: Clip.antiAlias,
+                                        child: InkWell(
+                                          onTap: () => _resumeHistory(entry),
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(12),
+                                            child: Row(children: [
+                                              Container(
+                                                width: 58, height: 82,
+                                                decoration: BoxDecoration(
+                                                  borderRadius: BorderRadius.circular(10),
+                                                  gradient: const LinearGradient(colors: [Color(0xffa84d79), Color(0xff382039)]),
+                                                ),
+                                                child: const Icon(Icons.play_circle_fill_rounded, color: Colors.white, size: 30),
+                                              ),
+                                              const SizedBox(width: 11),
+                                              Expanded(child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [
+                                                  Text(entry.seriesName, maxLines: 1, overflow: TextOverflow.ellipsis,
+                                                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+                                                  const SizedBox(height: 5),
+                                                  Text(entry.episodeName, maxLines: 1, overflow: TextOverflow.ellipsis,
+                                                    style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                                                  const SizedBox(height: 9),
+                                                  ClipRRect(borderRadius: BorderRadius.circular(8),
+                                                    child: LinearProgressIndicator(value: entry.progress, minHeight: 4,
+                                                      backgroundColor: Colors.white12,
+                                                      valueColor: const AlwaysStoppedAnimation(Color(0xffff6b9d)))),
+                                                  const SizedBox(height: 5),
+                                                  const Text('TOQUE PARA CONTINUAR',
+                                                    style: TextStyle(color: Color(0xffff91b8), fontSize: 8, letterSpacing: 0.8, fontWeight: FontWeight.w900)),
+                                                ],
+                                              )),
+                                            ]),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
                           );
                         },
                       ),
