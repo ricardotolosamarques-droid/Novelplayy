@@ -9,6 +9,7 @@ permissions:
 jobs:
   android:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: novelplay_v3
@@ -31,12 +32,48 @@ jobs:
       - name: Gerar estrutura Android com identificador correto
         run: flutter create --platforms=android --org com.example --project-name novelinha_app .
 
+      - name: Confirmar identificador Android
+        working-directory: novelplay_v3/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -R -E 'applicationId.*com\.example\.novelinha_app|namespace.*com\.example\.novelinha_app' app
+
+      - name: Criar keystore de depuração e conferir SHA-1
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_USER_HOME="$HOME/.config/.android"
+          mkdir -p "$ANDROID_USER_HOME" "$HOME/.android"
+          echo "ANDROID_USER_HOME=$ANDROID_USER_HOME" >> "$GITHUB_ENV"
+          if [ ! -f "$ANDROID_USER_HOME/debug.keystore" ]; then
+            keytool -genkeypair -noprompt -v \
+              -keystore "$ANDROID_USER_HOME/debug.keystore" \
+              -storepass android \
+              -alias AndroidDebugKey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          cp "$ANDROID_USER_HOME/debug.keystore" "$HOME/.android/debug.keystore"
+          keytool -list -v \
+            -keystore "$ANDROID_USER_HOME/debug.keystore" \
+            -storepass android \
+            -alias AndroidDebugKey | grep -E 'SHA1:|SHA256:'
+          echo "::warning title=Assinatura temporária::Este SHA-1 corresponde ao APK desta execução. Para manter o mesmo OAuth em builds futuros, será necessário configurar uma chave de assinatura persistente."
+
       - name: Instalar dependências
         run: flutter pub get
 
       - name: Mostrar SHA-1 da assinatura de debug
         working-directory: novelplay_v3/android
-        run: ./gradlew :app:signingReport
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew :app:signingReport | tee ../signing-report.txt
+          grep -Eq 'SHA1: [0-9A-F:]+' ../signing-report.txt
 
       - name: Compilar APK de teste
         working-directory: novelplay_v3
