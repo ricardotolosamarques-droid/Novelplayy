@@ -9,6 +9,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -19,7 +20,7 @@ jobs:
           cache: true
       - name: Gerar estrutura Android
         working-directory: novelplay_v3
-        run: flutter create --project-name novelplay_app --platforms android .
+        run: flutter create --org com.example --project-name novelinha_app --platforms android .
       - name: Permitir acesso à internet
         run: |
           python3 - <<'PY'
@@ -27,12 +28,46 @@ jobs:
           p=Path('novelplay_v3/android/app/src/main/AndroidManifest.xml')
           s=p.read_text()
           if 'android.permission.INTERNET' not in s:
-              s=s.replace('<application','<uses-permission android:name="android.permission.INTERNET" />\n    <application',1)
+              s=s.replace('<application','<uses-permission android:name="android.permission.INTERNET" />\\n    <application',1)
               p.write_text(s)
           PY
+      - name: Confirmar identificador Android
+        working-directory: novelplay_v3/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -R -E 'applicationId.*com\\.example\\.novelinha_app|namespace.*com\\.example\\.novelinha_app' app
+      - name: Criar keystore de depuração
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_USER_HOME="$HOME/.config/.android"
+          mkdir -p "$ANDROID_USER_HOME" "$HOME/.android"
+          echo "ANDROID_USER_HOME=$ANDROID_USER_HOME" >> "$GITHUB_ENV"
+          if [ ! -f "$ANDROID_USER_HOME/debug.keystore" ]; then
+            keytool -genkeypair -noprompt -v \\
+              -keystore "$ANDROID_USER_HOME/debug.keystore" \\
+              -storepass android \\
+              -alias AndroidDebugKey \\
+              -keypass android \\
+              -keyalg RSA \\
+              -keysize 2048 \\
+              -validity 10000 \\
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          cp "$ANDROID_USER_HOME/debug.keystore" "$HOME/.android/debug.keystore"
+          keytool -list -v -keystore "$ANDROID_USER_HOME/debug.keystore" -storepass android -alias AndroidDebugKey | grep -E 'SHA1:|SHA256:'
+          echo "::warning title=Assinatura temporária::Use o SHA-1 e o APK desta mesma execução para o teste OAuth. A chave muda em uma nova execução até configurarmos uma assinatura persistente."
       - name: Instalar pacotes
         working-directory: novelplay_v3
         run: flutter pub get
+      - name: Mostrar SHA-1 da assinatura usada no APK
+        working-directory: novelplay_v3/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew :app:signingReport | tee ../signing-report.txt
+          grep -Eq 'SHA1: [0-9A-F:]+' ../signing-report.txt
       - name: Compilar APK
         working-directory: novelplay_v3
         env:
@@ -48,7 +83,7 @@ jobs:
           if [[ -n "$API_INDEX_PATH" ]]; then args+=("--dart-define=API_INDEX_PATH=$API_INDEX_PATH"); fi
           if [[ -n "$API_INFO_PATH" ]]; then args+=("--dart-define=API_INFO_PATH=$API_INFO_PATH"); fi
           if [[ -n "$API_INFO_ID_PARAM" ]]; then args+=("--dart-define=API_INFO_ID_PARAM=$API_INFO_ID_PARAM"); fi
-          # Um APK específico por arquitetura evita alocar o pacote universal inteiro.
+          # APK ARM64 compatível com o Galaxy A34; o SHA-1 do mesmo build é exibido acima.
           flutter build apk --release --split-per-abi "${args[@]}"
       - name: Conferir APK ARM64 do Galaxy A34
         run: |
