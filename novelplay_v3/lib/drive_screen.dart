@@ -42,10 +42,15 @@ class WatchHistoryEntry {
 }
 
 class DriveEpisode {
-  const DriveEpisode(this.id, this.name, this.mimeType);
+  const DriveEpisode(this.id, this.name, this.mimeType, {this.resourceKey});
   final String id;
   final String name;
   final String mimeType;
+  final String? resourceKey;
+
+  Map<String, String> get resourceHeaders => resourceKey == null || resourceKey!.isEmpty
+      ? const <String, String>{}
+      : <String, String>{'X-Goog-Drive-Resource-Keys': '$id/$resourceKey'};
 
   int get number {
     final match = RegExp(r'\d+').firstMatch(name);
@@ -63,7 +68,12 @@ class DriveEpisode {
   Uri get directDownloadUri => Uri.https(
         'drive.google.com',
         '/uc',
-        {'export': 'download', 'id': id, 'confirm': 't'},
+        <String, String>{
+      'export': 'download',
+      'id': id,
+      'confirm': 't',
+      if (resourceKey != null && resourceKey!.isNotEmpty) 'resourcekey': resourceKey!,
+    },
       );
 }
 
@@ -123,7 +133,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
         'key': _apiKey,
         'pageSize': '1000',
         'orderBy': 'name',
-        'fields': 'files(id,name,mimeType),nextPageToken',
+        'fields': 'files(id,name,mimeType,resourceKey),nextPageToken',
       };
       if (pageToken != null) params['pageToken'] = pageToken;
       final uri = Uri.https('www.googleapis.com', '/drive/v3/files', params);
@@ -172,6 +182,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
               file['id'] as String,
               (file['name'] as String?) ?? 'Episódio',
               (file['mimeType'] as String?) ?? '',
+              resourceKey: file['resourceKey'] as String?,
             ))
         .toList();
     episodes.sort((a, b) {
@@ -744,13 +755,13 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
       VideoPlayerController? player;
       Object? apiError;
       try {
-        player = VideoPlayerController.networkUrl(episode.mediaUri);
+        player = VideoPlayerController.networkUrl(episode.mediaUri, headers: episode.resourceHeaders);
         _controller = player;
         await player.initialize();
       } catch (error) {
         apiError = error;
         await player?.dispose();
-        player = VideoPlayerController.networkUrl(episode.directDownloadUri);
+        player = VideoPlayerController.networkUrl(episode.directDownloadUri, headers: episode.resourceHeaders);
         _controller = player;
         try {
           await player.initialize();
@@ -775,7 +786,7 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
       if (mounted) {
         setState(() {
           _loading = false;
-          _error = 'O Google Drive não liberou a reprodução direta deste arquivo. Verifique se ele está público e se a API permite download. Detalhe: $e';
+          _error = 'Falha ao abrir o vídeo. Detalhe técnico: $e';
         });
       }
     }
