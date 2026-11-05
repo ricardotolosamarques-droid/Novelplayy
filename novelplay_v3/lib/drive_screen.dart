@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -796,6 +798,8 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
       }
       player.addListener(_onVideoChanged);
       await player.play();
+      await WakelockPlus.enable();
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: const [SystemUiOverlay.bottom]);
       if (mounted) {
         setState(() { _loading = false; _showPlaybackControl = true; });
         _scheduleHidePlaybackControl();
@@ -824,9 +828,13 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
     if (player.value.isPlaying) {
       _hideControlsTimer?.cancel();
       player.pause();
+      WakelockPlus.disable();
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
       setState(() => _showPlaybackControl = true);
     } else {
       player.play();
+      WakelockPlus.enable();
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: const [SystemUiOverlay.bottom]);
       setState(() => _showPlaybackControl = true);
       _scheduleHidePlaybackControl();
     }
@@ -990,6 +998,8 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
   @override
   void dispose() {
     _persistCurrentProgress();
+    WakelockPlus.disable();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     _hideControlsTimer?.cancel();
     _controller?.removeListener(_onVideoChanged);
     _controller?.dispose();
@@ -1102,7 +1112,7 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
               Positioned(
                 left: 16,
                 right: 16,
-                bottom: 48,
+                bottom: 8,
                 child: Center(
                   child: Material(
                     color: const Color(0xdd17141f),
@@ -1140,7 +1150,7 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
               Positioned(
                 left: 14,
                 right: 14,
-                bottom: 24,
+                bottom: 58,
                 child: VideoProgressIndicator(
                   _controller!,
                   allowScrubbing: true,
