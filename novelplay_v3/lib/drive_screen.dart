@@ -41,6 +41,8 @@ class DriveNovelScreen extends StatefulWidget {
 class _DriveNovelScreenState extends State<DriveNovelScreen> {
   String? _selectedFolderId;
   String? _selectedSeriesName;
+  String _searchQuery = '';
+  final Set<String> _favoriteIds = <String>{};
   late Future<List<dynamic>> _content = _loadSeries();
 
   Future<List<Map<String, dynamic>>> _listChildren(String parentId) async {
@@ -141,7 +143,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                   onPressed: _goBackToSeries,
                   icon: const Icon(Icons.arrow_back_rounded),
                 ),
-          title: Text(_selectedSeriesName ?? 'NOVELPLAY', style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.1)),
+          title: Text(_selectedSeriesName ?? 'NOVELINHA', style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.4)),
           actions: [
             IconButton(tooltip: 'Atualizar', onPressed: _refresh, icon: const Icon(Icons.refresh_rounded)),
             const SizedBox(width: 8),
@@ -162,8 +164,9 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
             }
             final items = snapshot.data ?? [];
             if (_selectedFolderId == null) {
-              final series = items.cast<DriveSeries>();
-              if (series.isEmpty) {
+              final allSeries = items.cast<DriveSeries>();
+              final series = allSeries.where((item) => item.name.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+              if (allSeries.isEmpty) {
                 return _DriveMessage(
                   title: 'Nenhuma série encontrada',
                   message: 'Crie uma pasta para cada novelinha dentro da pasta principal do Google Drive. O nome da pasta será o nome da série.',
@@ -206,7 +209,21 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 26),
+                    const SizedBox(height: 22),
+                    TextField(
+                      onChanged: (value) => setState(() => _searchQuery = value),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'Buscar novelinhas...',
+                        hintStyle: const TextStyle(color: Colors.white54),
+                        prefixIcon: const Icon(Icons.search_rounded, color: Color(0xffff8bb3)),
+                        filled: true,
+                        fillColor: const Color(0xff1c1c29),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 15),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
                     Row(
                       children: [
                         const Expanded(child: Text('Explorar séries', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800))),
@@ -244,6 +261,18 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                               child: Stack(
                                 children: [
                                   const Positioned(right: -12, top: 10, child: Icon(Icons.movie_creation_outlined, size: 94, color: Color(0x22ffffff))),
+                                  Positioned(
+                                    right: 10,
+                                    top: 10,
+                                    child: IconButton.filledTonal(
+                                      visualDensity: VisualDensity.compact,
+                                      style: IconButton.styleFrom(backgroundColor: const Color(0x33000000)),
+                                      onPressed: () => setState(() {
+                                        if (!_favoriteIds.add(item.id)) _favoriteIds.remove(item.id);
+                                      }),
+                                      icon: Icon(_favoriteIds.contains(item.id) ? Icons.favorite : Icons.favorite_border, color: const Color(0xffff8bb3), size: 19),
+                                    ),
+                                  ),
                                   Positioned(
                                     left: 14,
                                     right: 14,
