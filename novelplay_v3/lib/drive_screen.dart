@@ -609,6 +609,12 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
             Positioned.fill(
               child: GestureDetector(
                 behavior: HitTestBehavior.translucent,
+                onTap: () {
+                  if (!_showPlaybackControl && _controller != null && _controller!.value.isPlaying) {
+                    setState(() => _showPlaybackControl = true);
+                    _scheduleHidePlaybackControl();
+                  }
+                },
                 onVerticalDragEnd: (details) {
                   final velocity = details.primaryVelocity ?? 0;
                   if (velocity < -250) {
