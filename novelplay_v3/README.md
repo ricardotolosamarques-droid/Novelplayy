@@ -87,3 +87,22 @@ não exige chave. O serviço pode responder HTTP 403 (Cloudflare 1010)
 dependendo da origem; o app informa esse erro, sem contorná-lo.
 Não foi possível verificar a reprodução real na infraestrutura
 do GitHub/Render porque as consultas foram bloqueadas pelo provedor.
+
+
+## Integração com a pasta Google Drive
+
+A aba **Meu Drive** consulta a pasta pública configurada no app e ordena os vídeos pelo número no nome. A pasta precisa continuar compartilhada como **Qualquer pessoa com o link — Leitor**.
+
+Pasta configurada: `1O28a3-3bmKkVj_3dS9HlWX0Owyn3eFts`.
+
+### Configurar a chave sem publicá-la
+
+1. No GitHub, abra **Settings → Secrets and variables → Actions → New repository secret**.
+2. Nome do secret: `DRIVE_API_KEY`.
+3. Cole o valor da chave da Google Drive API e salve. Não coloque a chave em arquivos do projeto nem em mensagens públicas.
+4. Abra **Actions**, execute novamente o workflow **Preparar Android e obter SHA-1 do Novelinha** e aguarde a compilação.
+5. Baixe o artefato `novelinha-debug-apk` quando a execução terminar com sucesso.
+
+O workflow injeta a chave no build usando `--dart-define`; a chave não é gravada no código-fonte. Como toda chave incluída em um APK pode ser extraída do aplicativo, restrinja-a no Google Cloud Console à Drive API e acompanhe as cotas.
+
+**Limitação que precisa ser testada:** a listagem de arquivos públicos usa a API oficial do Drive. A reprodução também tenta obter o conteúdo pela API, mas o Google pode exigir autorização adicional ou limitar downloads/requisições. O Drive não é uma CDN de streaming; não há garantia de reprodução contínua nem de tráfego ilimitado. Se o vídeo não tocar, a tela mostrará o erro retornado pelo Google.
