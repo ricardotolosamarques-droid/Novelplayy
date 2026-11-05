@@ -291,10 +291,10 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(_tabIndex == 2 ? 'SUA COLEÇÃO' : _tabIndex == 1 ? 'DESCUBRA MAIS' : 'EM DESTAQUE', style: TextStyle(color: Color(0xffff83b0), fontSize: 9, letterSpacing: 2, fontWeight: FontWeight.w900)),
-                          SizedBox(height: 4),
-                          Text(_tabIndex == 2 ? 'Minha lista' : _tabIndex == 1 ? 'Explore dramas' : 'Novelinhas para assistir', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.4)),
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(_tabIndex == 2 ? 'SUA COLEÇÃO' : _tabIndex == 1 ? 'DESCUBRA MAIS' : 'EM DESTAQUE', style: const TextStyle(color: Color(0xffff83b0), fontSize: 9, letterSpacing: 2, fontWeight: FontWeight.w900)),
+                          const SizedBox(height: 4),
+                          Text(_tabIndex == 2 ? 'Minha lista' : _tabIndex == 1 ? 'Explore dramas' : 'Novelinhas para assistir', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.4)),
                         ])),
                         Text('${series.length} títulos', style: const TextStyle(color: Color(0xff918b9b), fontSize: 11)),
                       ],
