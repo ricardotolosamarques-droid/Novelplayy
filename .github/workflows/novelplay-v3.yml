@@ -28,7 +28,7 @@ jobs:
           p=Path('novelplay_v3/android/app/src/main/AndroidManifest.xml')
           s=p.read_text()
           if 'android.permission.INTERNET' not in s:
-              s=s.replace('<application','<uses-permission android:name="android.permission.INTERNET" />\\n    <application',1)
+              s=s.replace('<application','<uses-permission android:name="android.permission.INTERNET" />\n    <application',1)
               p.write_text(s)
           PY
       - name: Confirmar identificador Android
@@ -36,7 +36,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -R -E 'applicationId.*com\\.example\\.novelinha_app|namespace.*com\\.example\\.novelinha_app' app
+          grep -R -E 'applicationId.*com\.example\.novelinha_app|namespace.*com\.example\.novelinha_app' app
       - name: Criar keystore de depuração
         shell: bash
         run: |
@@ -45,14 +45,14 @@ jobs:
           mkdir -p "$ANDROID_USER_HOME" "$HOME/.android"
           echo "ANDROID_USER_HOME=$ANDROID_USER_HOME" >> "$GITHUB_ENV"
           if [ ! -f "$ANDROID_USER_HOME/debug.keystore" ]; then
-            keytool -genkeypair -noprompt -v \\
-              -keystore "$ANDROID_USER_HOME/debug.keystore" \\
-              -storepass android \\
-              -alias AndroidDebugKey \\
-              -keypass android \\
-              -keyalg RSA \\
-              -keysize 2048 \\
-              -validity 10000 \\
+            keytool -genkeypair -noprompt -v \
+              -keystore "$ANDROID_USER_HOME/debug.keystore" \
+              -storepass android \
+              -alias AndroidDebugKey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
               -dname "CN=Android Debug,O=Android,C=US"
           fi
           cp "$ANDROID_USER_HOME/debug.keystore" "$HOME/.android/debug.keystore"
