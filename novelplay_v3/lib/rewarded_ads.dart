@@ -11,6 +11,7 @@ class NovelRewardedAds {
       'ca-app-pub-3940256099942544/5224354917';
 
   static Future<void>? _initialization;
+  static bool _rewardInProgress = false;
 
   static Future<void> _initialize() {
     return _initialization ??= MobileAds.instance.initialize().then((_) {});
@@ -19,17 +20,24 @@ class NovelRewardedAds {
   /// Assiste voluntariamente a outro anúncio e soma mais 30 minutos,
   /// mesmo que já exista tempo disponível.
   static Future<bool> watchAdForMoreAccess() async {
-    final earnedReward = await _showRewardedAd();
-    if (!earnedReward) return false;
-    final prefs = await SharedPreferences.getInstance();
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final savedUntil = prefs.getInt(_accessUntilKey) ?? 0;
-    final baseTime = savedUntil > now ? savedUntil : now;
-    await prefs.setInt(
-      _accessUntilKey,
-      baseTime + accessDuration.inMilliseconds,
-    );
-    return true;
+    // Impede dois anúncios simultâneos de concederem recompensas duplicadas.
+    if (_rewardInProgress) return false;
+    _rewardInProgress = true;
+    try {
+      final earnedReward = await _showRewardedAd();
+      if (!earnedReward) return false;
+      final prefs = await SharedPreferences.getInstance();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final savedUntil = prefs.getInt(_accessUntilKey) ?? 0;
+      final baseTime = savedUntil > now ? savedUntil : now;
+      await prefs.setInt(
+        _accessUntilKey,
+        baseTime + accessDuration.inMilliseconds,
+      );
+      return true;
+    } finally {
+      _rewardInProgress = false;
+    }
   }
 
   /// Retorna true se o usuário já tem tempo ativo ou concluiu um anúncio.
@@ -39,16 +47,24 @@ class NovelRewardedAds {
     final prefs = await SharedPreferences.getInstance();
     final now = DateTime.now().millisecondsSinceEpoch;
     final savedUntil = prefs.getInt(_accessUntilKey) ?? 0;
-
     if (savedUntil > now) return true;
+    if (_rewardInProgress) return false;
 
-    final earnedReward = await _showRewardedAd();
-    if (!earnedReward) return false;
-
-    final baseTime = savedUntil > now ? savedUntil : now;
-    final newUntil = baseTime + accessDuration.inMilliseconds;
-    await prefs.setInt(_accessUntilKey, newUntil);
-    return true;
+    _rewardInProgress = true;
+    try {
+      final earnedReward = await _showRewardedAd();
+      if (!earnedReward) return false;
+      final currentNow = DateTime.now().millisecondsSinceEpoch;
+      final latestUntil = prefs.getInt(_accessUntilKey) ?? 0;
+      final baseTime = latestUntil > currentNow ? latestUntil : currentNow;
+      await prefs.setInt(
+        _accessUntilKey,
+        baseTime + accessDuration.inMilliseconds,
+      );
+      return true;
+    } finally {
+      _rewardInProgress = false;
+    }
   }
 
   static Future<Duration> remainingAccess() async {
