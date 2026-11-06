@@ -58,7 +58,7 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
               keyboardType: TextInputType.url,
               decoration: const InputDecoration(
                 labelText: 'Link da novelinha no ReelShort',
-                hintText: 'https://www.reelshort.com/movie/...',
+                hintText: 'https://www.reelshort.com/pt/full-episodes/...',
               ),
             ),
             const SizedBox(height: 12),
@@ -82,7 +82,7 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
       final uri = Uri.tryParse(link.text.trim());
       if (uri == null || uri.scheme != 'https' ||
           !(uri.host == 'reelshort.com' || uri.host == 'www.reelshort.com') ||
-          !uri.path.startsWith('/movie/')) {
+          !(uri.path.startsWith('/movie/') || RegExp(r'^/[a-z]{2}/full-episodes/').hasMatch(uri.path))) {
         throw Exception('Cole um link HTTPS de uma novelinha do ReelShort.');
       }
       var pathPart = uri.pathSegments.isNotEmpty ? uri.pathSegments.last : '';
