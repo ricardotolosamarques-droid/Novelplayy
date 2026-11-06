@@ -646,6 +646,7 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
   VideoPlayerController? _nextController;
   int? _nextControllerIndex;
   bool _preloadingNext = false;
+  int _autoAdvancedIndex = -1;
   bool _loading = true;
   bool _showPlaybackControl = true;
   Timer? _hideControlsTimer;
@@ -823,13 +824,16 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
     if (player.value.duration > Duration.zero &&
         player.value.position >= player.value.duration &&
         !player.value.isPlaying &&
-        _index < widget.episodes.length - 1) {
+        _index < widget.episodes.length - 1 &&
+        _autoAdvancedIndex != _index) {
+      _autoAdvancedIndex = _index;
       _pageController.nextPage(
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOut,
       );
     }
-    if (mounted) setState(() {});
+    // O indicador de progresso observa o controller; não reconstruir a tela
+    // inteira a cada atualização de posição do vídeo.
   }
 
   Future<void> _showEpisodePicker() async {
