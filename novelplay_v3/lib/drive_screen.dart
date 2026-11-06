@@ -827,78 +827,132 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
     _hideControlsTimer?.cancel();
     final selected = await showModalBottomSheet<int>(
       context: context,
-      backgroundColor: const Color(0xff17141f),
+      backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-      ),
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+      useSafeArea: true,
+      builder: (sheetContext) {
+        final screenHeight = MediaQuery.of(sheetContext).size.height;
+        return Container(
+          height: screenHeight * 0.72,
+          decoration: const BoxDecoration(
+            color: Color(0xff111114),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(
-                child: Container(
-                  width: 42, height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+              const SizedBox(height: 10),
+              Container(
+                width: 38,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xff55555b),
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              const SizedBox(height: 22),
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('LISTA DE EPISÓDIOS',
-                          style: TextStyle(color: Color(0xffff83b0),
-                            fontSize: 10, letterSpacing: 1.8,
-                            fontWeight: FontWeight.w900)),
-                        const SizedBox(height: 5),
-                        Text(widget.seriesName,
-                          maxLines: 1, overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 19,
-                            fontWeight: FontWeight.w900, color: Colors.white)),
-                      ],
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 22, 16, 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Episódios',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 21,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            widget.seriesName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xffa6a6ad),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  Text('${widget.episodes.length} episódios',
-                    style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                ],
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xff25252b),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${widget.episodes.length} episódios',
+                        style: const TextStyle(
+                          color: Color(0xffd8d8dc),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 20),
-              Flexible(
+              const Divider(height: 1, color: Color(0xff29292e)),
+              Expanded(
                 child: GridView.builder(
-                  shrinkWrap: true,
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
                   itemCount: widget.episodes.length,
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 5,
-                    mainAxisSpacing: 10,
-                    crossAxisSpacing: 10,
-                    childAspectRatio: 1.12,
+                    mainAxisSpacing: 11,
+                    crossAxisSpacing: 11,
+                    childAspectRatio: 1.18,
                   ),
                   itemBuilder: (_, i) {
                     final episode = widget.episodes[i];
                     final number = episode.number == 0 ? i + 1 : episode.number;
                     final active = i == _index;
                     return Material(
-                      color: active ? const Color(0xffff6b9d) : const Color(0xff292433),
-                      borderRadius: BorderRadius.circular(12),
+                      color: active ? const Color(0xffe91e50) : const Color(0xff242429),
+                      borderRadius: BorderRadius.circular(9),
                       child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(9),
                         onTap: () => Navigator.pop(sheetContext, i),
-                        child: Center(
-                          child: Text('$number',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: active ? FontWeight.w900 : FontWeight.w700,
-                            )),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(9),
+                            border: Border.all(
+                              color: active ? const Color(0xffff7898) : const Color(0xff34343b),
+                              width: active ? 1.4 : 0.8,
+                            ),
+                          ),
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '$number',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: active ? FontWeight.w900 : FontWeight.w700,
+                                  ),
+                                ),
+                                if (active) ...[
+                                  const SizedBox(height: 2),
+                                  const Text(
+                                    'ATUAL',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 7,
+                                      letterSpacing: 0.7,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     );
@@ -907,8 +961,8 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
               ),
             ],
           ),
-        ),
-      ),
+        );
+      },
     );
     if (!mounted) return;
     if (selected != null && selected != _index) {
