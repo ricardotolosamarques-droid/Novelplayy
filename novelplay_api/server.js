@@ -268,6 +268,17 @@ async function getReelShortBuildId(force = false) {
   return reelShortBuildId;
 }
 
+function normalizeReelShortSlug(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\\u0300-\\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-+/g, '-')
+    .slice(0, 180);
+}
+
 async function reelShortJson(path, retry = true) {
   const buildId = await getReelShortBuildId();
   const url = 'https://www.reelshort.com/_next/data/' + encodeURIComponent(buildId) + '/id' + path;
@@ -311,7 +322,7 @@ app.get('/reelshort/search', reelShortLimiter, async (req, res) => {
     const results = books.map(book => ({
       book_id: String(book._id || book.book_id || ''),
       book_title: String(book.book_title || ''),
-      filtered_title: String(book.filtered_title || String(book.book_title || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, '-')),
+      filtered_title: normalizeReelShortSlug(book.filtered_title || book.book_title),
       book_pic: String(book.book_pic || ''),
       special_desc: String(book.special_desc || ''),
       chapter_count: Number(book.chapter_count || 0)
@@ -325,8 +336,8 @@ app.get('/reelshort/search', reelShortLimiter, async (req, res) => {
 
 app.get('/reelshort/episodes/:bookId', reelShortLimiter, async (req, res) => {
   const bookId = String(req.params.bookId || '');
-  const filteredTitle = String(req.query.filtered_title || '').trim();
-  if (!/^[A-Za-z0-9_-]{4,100}$/.test(bookId) || !/^[\p{L}\p{N}-]{1,180}$/u.test(filteredTitle)) {
+  const filteredTitle = normalizeReelShortSlug(req.query.filtered_title);
+  if (!/^[A-Za-z0-9_-]{4,100}$/.test(bookId) || !filteredTitle) {
     return res.status(400).json({ error: 'Identificador ou título de origem inválido.' });
   }
   try {
