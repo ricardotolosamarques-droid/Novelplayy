@@ -1,54 +1,92 @@
 import 'dart:async';
 
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-/// Anúncio recompensado usando o identificador oficial de teste do Google.
-/// Trocar pelo bloco de anúncios real do AdMob após validar o fluxo no aparelho.
+/// Acesso sem anúncios concedido por anúncios recompensados.
 class NovelRewardedAds {
+  static const Duration accessDuration = Duration(minutes: 30);
+  static const String _accessUntilKey = 'novelplay_ad_free_until';
+  static const String _testRewardedAdUnitId =
+      'ca-app-pub-3940256099942544/5224354917';
+
   static Future<void>? _initialization;
 
   static Future<void> _initialize() {
     return _initialization ??= MobileAds.instance.initialize().then((_) {});
   }
 
-  static Future<bool> showForSeriesUnlock() async {
-    await _initialize();
+  /// Retorna true se o usuário já tem tempo ativo ou concluiu um anúncio.
+  /// O horário é salvo como timestamp absoluto e continua válido após fechar
+  /// ou reiniciar o aplicativo.
+  static Future<bool> ensureAdFreeAccess() async {
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final savedUntil = prefs.getInt(_accessUntilKey) ?? 0;
 
-    final result = Completer<bool>();
-    RewardedAd.load(
-      adUnitId: 'ca-app-pub-3940256099942544/5224354917',
-      request: const AdRequest(),
-      rewardedAdLoadCallback: RewardedAdLoadCallback(
-        onAdLoaded: (ad) {
-          var earnedReward = false;
-          ad.fullScreenContentCallback = FullScreenContentCallback(
-            onAdDismissedFullScreenContent: (ad) {
-              ad.dispose();
-              if (!result.isCompleted) result.complete(earnedReward);
-            },
-            onAdFailedToShowFullScreenContent: (ad, error) {
-              ad.dispose();
-              if (!result.isCompleted) result.complete(false);
-            },
-          );
+    if (savedUntil > now) return true;
 
-          try {
-            ad.show(
-              onUserEarnedReward: (ad, reward) {
-                earnedReward = true;
+    final earnedReward = await _showRewardedAd();
+    if (!earnedReward) return false;
+
+    final baseTime = savedUntil > now ? savedUntil : now;
+    final newUntil = baseTime + accessDuration.inMilliseconds;
+    await prefs.setInt(_accessUntilKey, newUntil);
+    return true;
+  }
+
+  static Future<Duration> remainingAccess() async {
+    final prefs = await SharedPreferences.getInstance();
+    final until = prefs.getInt(_accessUntilKey) ?? 0;
+    final remaining = until - DateTime.now().millisecondsSinceEpoch;
+    return remaining > 0 ? Duration(milliseconds: remaining) : Duration.zero;
+  }
+
+  static Future<bool> _showRewardedAd() async {
+    try {
+      await _initialize().timeout(const Duration(seconds: 30));
+      final result = Completer<bool>();
+
+      RewardedAd.load(
+        adUnitId: _testRewardedAdUnitId,
+        request: const AdRequest(),
+        rewardedAdLoadCallback: RewardedAdLoadCallback(
+          onAdLoaded: (ad) {
+            var earnedReward = false;
+            ad.fullScreenContentCallback = FullScreenContentCallback(
+              onAdDismissedFullScreenContent: (ad) {
+                ad.dispose();
+                if (!result.isCompleted) result.complete(earnedReward);
+              },
+              onAdFailedToShowFullScreenContent: (ad, error) {
+                ad.dispose();
+                if (!result.isCompleted) result.complete(false);
               },
             );
-          } catch (_) {
-            ad.dispose();
-            if (!result.isCompleted) result.complete(false);
-          }
-        },
-        onAdFailedToLoad: (error) {
-          if (!result.isCompleted) result.complete(false);
-        },
-      ),
-    );
 
-    return result.future;
+            try {
+              ad.show(
+                onUserEarnedReward: (ad, reward) {
+                  earnedReward = true;
+                },
+              );
+            } catch (_) {
+              ad.dispose();
+              if (!result.isCompleted) result.complete(false);
+            }
+          },
+          onAdFailedToLoad: (error) {
+            if (!result.isCompleted) result.complete(false);
+          },
+        ),
+      );
+
+      return await result.future.timeout(
+        const Duration(minutes: 2),
+        onTimeout: () => false,
+      );
+    } catch (_) {
+      return false;
+    }
   }
 }
