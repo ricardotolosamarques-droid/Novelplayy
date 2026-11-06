@@ -16,6 +16,22 @@ class NovelRewardedAds {
     return _initialization ??= MobileAds.instance.initialize().then((_) {});
   }
 
+  /// Assiste voluntariamente a outro anúncio e soma mais 30 minutos,
+  /// mesmo que já exista tempo disponível.
+  static Future<bool> watchAdForMoreAccess() async {
+    final earnedReward = await _showRewardedAd();
+    if (!earnedReward) return false;
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final savedUntil = prefs.getInt(_accessUntilKey) ?? 0;
+    final baseTime = savedUntil > now ? savedUntil : now;
+    await prefs.setInt(
+      _accessUntilKey,
+      baseTime + accessDuration.inMilliseconds,
+    );
+    return true;
+  }
+
   /// Retorna true se o usuário já tem tempo ativo ou concluiu um anúncio.
   /// O horário é salvo como timestamp absoluto e continua válido após fechar
   /// ou reiniciar o aplicativo.
