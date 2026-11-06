@@ -21,7 +21,7 @@ jobs:
       - name: Gerar estrutura Android
         working-directory: novelplay_v3
         run: flutter create --org com.example --project-name novelinha_app --platforms android .
-      - name: Configurar permissões e App ID de teste do AdMob
+      - name: Configurar permissão de internet
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -40,19 +40,9 @@ jobs:
               permission.set(android + "name", internet)
               root.insert(0, permission)
 
-          application = root.find("application")
-          if application is None:
-              raise SystemExit("Tag application não encontrada no AndroidManifest.xml")
-
-          app_id_name = "com.google.android.gms.ads.APPLICATION_ID"
-          if not any(node.get(android + "name") == app_id_name for node in application.findall("meta-data")):
-              metadata = ET.SubElement(application, "meta-data")
-              metadata.set(android + "name", app_id_name)
-              metadata.set(android + "value", "ca-app-pub-3940256099942544~3347511713")
-
           tree.write(path, encoding="utf-8", xml_declaration=True)
           ET.parse(path)
-          print("AndroidManifest.xml válido e App ID configurado.")
+          print("AndroidManifest.xml válido; anúncios nativos temporariamente desativados.")
           PY
       - name: Confirmar identificador Android
         working-directory: novelplay_v3/android
