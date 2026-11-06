@@ -82,7 +82,8 @@ class DriveEpisode {
 }
 
 class DriveNovelScreen extends StatefulWidget {
-  const DriveNovelScreen({super.key});
+  final bool isAdmin;
+  const DriveNovelScreen({super.key, this.isAdmin = false});
 
   @override
   State<DriveNovelScreen> createState() => _DriveNovelScreenState();
@@ -227,7 +228,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
     if (_openingSeries) return;
     _openingSeries = true;
     try {
-      if (!_unlockedSeriesIds.contains(series.id)) {
+      if (!widget.isAdmin && !_unlockedSeriesIds.contains(series.id)) {
         final savedUnlocks = await NovelSeriesUnlocks.load();
         _unlockedSeriesIds
           ..clear()
