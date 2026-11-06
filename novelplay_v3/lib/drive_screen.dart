@@ -111,6 +111,92 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
     } catch (_) { return []; }
   }
 
+
+  Future<void> _watchAdFromProfile() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final earned = await NovelRewardedAds.watchAdForMoreAccess();
+    if (!mounted) return;
+    setState(() {});
+    messenger.showSnackBar(SnackBar(
+      content: Text(earned
+          ? 'Pronto! Você ganhou mais 30 minutos sem anúncios.'
+          : 'O anúncio não foi concluído. Nenhum tempo foi adicionado.'),
+    ));
+  }
+
+  Widget _profilePage() {
+    return FutureBuilder<Duration>(
+      future: NovelRewardedAds.remainingAccess(),
+      builder: (context, snapshot) {
+        final remaining = snapshot.data ?? Duration.zero;
+        final active = remaining > Duration.zero;
+        final hours = remaining.inHours;
+        final minutes = remaining.inMinutes.remainder(60);
+        final seconds = remaining.inSeconds.remainder(60);
+        final timeLabel = active
+            ? hours > 0
+                ? '${hours}h ${minutes.toString().padLeft(2, '0')}min'
+                : '${minutes.toString().padLeft(2, '0')}min ${seconds.toString().padLeft(2, '0')}s'
+            : 'Tempo esgotado';
+        return ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            const SizedBox(height: 24),
+            const CircleAvatar(
+              radius: 42,
+              backgroundColor: Color(0xff38202a),
+              child: Icon(Icons.person_rounded, size: 48, color: Color(0xffff6b9d)),
+            ),
+            const SizedBox(height: 14),
+            const Center(child: Text('MEU PERFIL', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900))),
+            const SizedBox(height: 26),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                gradient: const LinearGradient(colors: [Color(0xff702b59), Color(0xff30203f)]),
+                border: Border.all(color: const Color(0x55ff6b9d)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(children: [
+                    Icon(Icons.timer_outlined, color: Color(0xffff8bb3)),
+                    SizedBox(width: 8),
+                    Text('TEMPO SEM ANÚNCIOS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.7)),
+                  ]),
+                  const SizedBox(height: 15),
+                  Text(timeLabel, style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 7),
+                  Text(
+                    active ? 'Você pode assistir a todas as novelinhas enquanto esse tempo estiver ativo.' : 'Assista a um anúncio para liberar 30 minutos de acesso.',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _openingSeries ? null : _watchAdFromProfile,
+                      icon: const Icon(Icons.play_circle_fill),
+                      label: const Text('ASSISTIR ANÚNCIO E GANHAR +30 MIN'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xffe51b3e),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            const Text('Dica: você pode assistir a vários anúncios para acumular tempo, mesmo antes de o tempo atual acabar.', style: TextStyle(color: Colors.white60, height: 1.4)),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _resumeHistory(WatchHistoryEntry entry) async {
     try {
       final episodes = await _loadEpisodes(entry.seriesId);
@@ -333,6 +419,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
             final items = snapshot.data ?? [];
             if (_selectedFolderId == null) {
               final allSeries = items.cast<DriveSeries>();
+              if (_bottomIndex == 4) return _profilePage();
               final series = allSeries.where((item) {
                 final matchesSearch = item.name.toLowerCase().contains(_searchQuery.toLowerCase());
                 final matchesTab = _bottomIndex != 2 || _favoriteIds.contains(item.id);
