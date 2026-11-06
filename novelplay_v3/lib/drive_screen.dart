@@ -745,6 +745,9 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
   late final PageController _pageController;
   late int _index;
   VideoPlayerController? _controller;
+  VideoPlayerController? _nextController;
+  int? _nextControllerIndex;
+  bool _preloadingNext = false;
   bool _loading = true;
   bool _showPlaybackControl = true;
   Timer? _hideControlsTimer;
@@ -760,37 +763,71 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
     _initialize();
   }
 
+  Future<VideoPlayerController> _createInitializedPlayer(DriveEpisode episode) async {
+    VideoPlayerController? player;
+    Object? apiError;
+    try {
+      player = VideoPlayerController.networkUrl(episode.mediaUri, httpHeaders: episode.resourceHeaders);
+      await player.initialize();
+      return player;
+    } catch (error) {
+      apiError = error;
+      await player?.dispose();
+      player = VideoPlayerController.networkUrl(episode.directDownloadUri, httpHeaders: episode.resourceHeaders);
+      try {
+        await player.initialize();
+        return player;
+      } catch (fallbackError) {
+        await player.dispose();
+        throw Exception('A API do Drive recusou: $apiError. O link direto também falhou: $fallbackError. Confira se o vídeo está compartilhado como "Qualquer pessoa com o link" e com acesso de leitor.');
+      }
+    }
+  }
+
+  Future<void> _preloadNextEpisode() async {
+    if (_preloadingNext || _nextController != null || _index >= widget.episodes.length - 1) return;
+    _preloadingNext = true;
+    final targetIndex = _index + 1;
+    VideoPlayerController? candidate;
+    try {
+      candidate = await _createInitializedPlayer(widget.episodes[targetIndex]);
+      if (!mounted || _index + 1 != targetIndex || _nextController != null) {
+        await candidate.dispose();
+        return;
+      }
+      _nextController = candidate;
+      _nextControllerIndex = targetIndex;
+    } catch (_) {
+      // Se o pré-carregamento falhar, a troca normal tentará abrir o episódio.
+    } finally {
+      _preloadingNext = false;
+    }
+  }
+
   Future<void> _initialize() async {
     final previous = _controller;
-    _controller = null;
+    final prepared = _nextControllerIndex == _index ? _nextController : null;
+    _controller = prepared;
+    if (prepared != null) {
+      _nextController = null;
+      _nextControllerIndex = null;
+    } else {
+      _controller = null;
+    }
     await previous?.dispose();
-    if (!mounted) return;
+    if (!mounted) {
+      if (prepared != null) await prepared.dispose();
+      return;
+    }
     setState(() {
-      _loading = true;
+      _loading = prepared == null;
       _error = null;
     });
 
     try {
       final episode = widget.episodes[_index];
-      late VideoPlayerController player;
-      Object? apiError;
-      try {
-        player = VideoPlayerController.networkUrl(episode.mediaUri, httpHeaders: episode.resourceHeaders);
-        _controller = player;
-        await player.initialize();
-      } catch (error) {
-        apiError = error;
-        await player.dispose();
-        player = VideoPlayerController.networkUrl(episode.directDownloadUri, httpHeaders: episode.resourceHeaders);
-        _controller = player;
-        try {
-          await player.initialize();
-        } catch (fallbackError) {
-          await player.dispose();
-          _controller = null;
-          throw Exception('A API do Drive recusou: $apiError. O link direto também falhou: $fallbackError. Confira se o vídeo está compartilhado como "Qualquer pessoa com o link" e com acesso de leitor.');
-        }
-      }
+      final player = prepared ?? await _createInitializedPlayer(episode);
+      _controller = player;
       if (!_restoredInitialPosition && _index == widget.initialIndex && widget.initialPosition > Duration.zero) {
         final target = widget.initialPosition < player.value.duration ? widget.initialPosition : player.value.duration;
         if (target > Duration.zero) await player.seekTo(target);
@@ -798,6 +835,8 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
       }
       player.addListener(_onVideoChanged);
       await player.play();
+      // Prepara o próximo vídeo enquanto o atual ainda está tocando.
+      unawaited(_preloadNextEpisode());
       await WakelockPlus.enable();
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: const [SystemUiOverlay.bottom]);
       if (mounted) {
@@ -1003,6 +1042,7 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
     _hideControlsTimer?.cancel();
     _controller?.removeListener(_onVideoChanged);
     _controller?.dispose();
+    _nextController?.dispose();
     _pageController.dispose();
     super.dispose();
   }
