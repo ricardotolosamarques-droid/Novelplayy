@@ -69,11 +69,15 @@ async function initializeDatabase() {
       series_id BIGINT NOT NULL REFERENCES catalog_series(id) ON DELETE CASCADE,
       episode_number INTEGER NOT NULL CHECK (episode_number > 0),
       title VARCHAR(180) NOT NULL,
-      video_url TEXT NOT NULL,
+      video_url TEXT NOT NULL DEFAULT '',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE (series_id, episode_number)
     )
   `);
+
+  // Imported metadata can exist before an authorized playback URL is supplied.
+  await pool.query("ALTER TABLE catalog_episodes ALTER COLUMN video_url SET DEFAULT ''");
+  await pool.query('ALTER TABLE catalog_episodes ALTER COLUMN video_url DROP NOT NULL');
 
   const adminUsername = (process.env.ADMIN_USERNAME || 'Admin').trim();
   const adminEmail = (process.env.ADMIN_EMAIL || 'admin@novelplay.local').trim().toLowerCase();
@@ -279,6 +283,67 @@ app.post('/admin/catalog/series', authRequired, async (req, res) => {
     if (error.code === '23505') return res.status(409).json({ error: 'Já existe uma série com esse nome.' });
     console.error('Erro ao criar série:', error.message);
     return res.status(500).json({ error: 'Não foi possível criar a série.' });
+  }
+});
+
+app.post('/admin/catalog/import', authRequired, async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Acesso exclusivo do administrador.' });
+  const title = String(req.body.title || '').trim();
+  const synopsis = String(req.body.synopsis || '').trim();
+  const coverUrl = String(req.body.coverUrl || '').trim();
+  const episodes = Array.isArray(req.body.episodes) ? req.body.episodes : [];
+  if (!title || title.length > 180) return res.status(400).json({ error: 'Nome da série inválido.' });
+  if (synopsis.length > 4000) return res.status(400).json({ error: 'Descrição muito longa.' });
+  if (coverUrl && (!isHttpsUrl(coverUrl) || coverUrl.length > 2000)) return res.status(400).json({ error: 'Capa HTTPS inválida.' });
+  if (episodes.length < 1 || episodes.length > 1000) return res.status(400).json({ error: 'A importação precisa conter de 1 a 1000 episódios.' });
+  const normalized = [];
+  const seen = new Set();
+  for (const item of episodes) {
+    const number = Number(item && item.number);
+    const episodeTitle = String(item && item.title || '').trim();
+    if (!Number.isSafeInteger(number) || number < 1 || number > 100000 ||
+        !episodeTitle || episodeTitle.length > 180 || seen.has(number)) {
+      return res.status(400).json({ error: 'A lista contém um episódio inválido ou repetido.' });
+    }
+    seen.add(number);
+    normalized.push({ number, title: episodeTitle });
+  }
+  normalized.sort((a, b) => a.number - b.number);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const seriesResult = await client.query(
+      `INSERT INTO catalog_series (title, synopsis, cover_url)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (title) DO UPDATE
+         SET synopsis = EXCLUDED.synopsis,
+             cover_url = CASE WHEN EXCLUDED.cover_url <> '' THEN EXCLUDED.cover_url ELSE catalog_series.cover_url END
+       RETURNING id, title`,
+      [title, synopsis, coverUrl]
+    );
+    const seriesId = seriesResult.rows[0].id;
+    for (const episode of normalized) {
+      await client.query(
+        `INSERT INTO catalog_episodes (series_id, episode_number, title, video_url)
+         VALUES ($1, $2, $3, '')
+         ON CONFLICT (series_id, episode_number) DO UPDATE
+           SET title = EXCLUDED.title`,
+        [seriesId, episode.number, episode.title]
+      );
+    }
+    await client.query('COMMIT');
+    return res.status(200).json({
+      imported: true,
+      series: { id: String(seriesId), title: seriesResult.rows[0].title },
+      episodeCount: normalized.length,
+      playback: 'metadata_only'
+    });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Erro ao importar metadados:', error.message);
+    return res.status(500).json({ error: 'Não foi possível importar a série.' });
+  } finally {
+    client.release();
   }
 });
 
