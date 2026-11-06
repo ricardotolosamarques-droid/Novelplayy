@@ -466,7 +466,7 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
                 if (widget.isAdmin)
                   IconButton(
                     tooltip: 'Adicionar ou alterar link',
-                    icon: const Icon(Icons.edit_link, color: Color(0xffff6b9d)),
+                    icon: const Icon(Icons.link, color: Color(0xffff6b9d)),
                     onPressed: () => _addEpisode(existing: episode),
                   ),
                 Icon((episode['videoUrl'] ?? '').toString().isEmpty ? Icons.lock_outline : Icons.play_circle_outline, color: const Color(0xffff6b9d)),
