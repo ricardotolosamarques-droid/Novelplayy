@@ -7,7 +7,6 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'series_unlocks.dart';
 import 'rewarded_ads.dart';
 
 const _folderId = '1O28a3-3bmKkVj_3dS9HlWX0Owyn3eFts';
@@ -96,7 +95,6 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
   final Set<String> _favoriteIds = <String>{};
   int _tabIndex = 0;
   int _bottomIndex = 0;
-  final Set<String> _unlockedSeriesIds = <String>{};
   bool _openingSeries = false;
   late Future<List<dynamic>> _content = _loadSeries();
   late Future<List<WatchHistoryEntry>> _historyFuture = _loadHistory();
@@ -237,19 +235,11 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
     if (_openingSeries) return;
     _openingSeries = true;
     try {
-      if (!widget.isAdmin && !_unlockedSeriesIds.contains(series.id)) {
-        final savedUnlocks = await NovelSeriesUnlocks.load();
-        _unlockedSeriesIds
-          ..clear()
-          ..addAll(savedUnlocks);
-      }
-      if (!widget.isAdmin && !_unlockedSeriesIds.contains(series.id)) {
-        final earnedReward = await NovelRewardedAds.showForSeriesUnlock();
-        if (!earnedReward) {
-          throw Exception('Assista ao anúncio completo para desbloquear esta novelinha. Se o anúncio não carregar, tente novamente mais tarde.');
+      if (!widget.isAdmin) {
+        final hasAdFreeAccess = await NovelRewardedAds.ensureAdFreeAccess();
+        if (!hasAdFreeAccess) {
+          throw Exception('Assista ao anúncio completo para liberar 30 minutos sem anúncios. Se o anúncio não carregar, tente novamente mais tarde.');
         }
-        await NovelSeriesUnlocks.unlock(series.id);
-        _unlockedSeriesIds.add(series.id);
       }
       if (!mounted) return;
       setState(() {
