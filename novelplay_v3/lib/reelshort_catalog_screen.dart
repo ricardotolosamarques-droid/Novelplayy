@@ -182,6 +182,12 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception(data is Map ? data['error'] ?? 'Falha ao salvar.' : 'Falha ao salvar.');
       }
+      final updated = (widget.series['episodes'] as List? ?? []).whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .where((item) => item['number'] != parsedNumber)
+          .toList();
+      updated.add({'number': parsedNumber, 'title': title.text.trim().isEmpty ? 'Episódio $parsedNumber' : title.text.trim(), 'videoUrl': url.text.trim()});
+      widget.series['episodes'] = updated;
       setState(() {});
       widget.onChanged();
       _show('Episódio salvo no catálogo.');
