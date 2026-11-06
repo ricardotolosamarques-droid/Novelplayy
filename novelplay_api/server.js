@@ -326,7 +326,7 @@ app.get('/reelshort/search', reelShortLimiter, async (req, res) => {
 app.get('/reelshort/episodes/:bookId', reelShortLimiter, async (req, res) => {
   const bookId = String(req.params.bookId || '');
   const filteredTitle = String(req.query.filtered_title || '').trim();
-  if (!/^[A-Za-z0-9_-]{4,100}$/.test(bookId) || !/^[A-Za-z0-9-]{1,180}$/.test(filteredTitle)) {
+  if (!/^[A-Za-z0-9_-]{4,100}$/.test(bookId) || !/^[\\p{L}\\p{N}-]{1,180}$/u.test(filteredTitle)) {
     return res.status(400).json({ error: 'Identificador ou título de origem inválido.' });
   }
   try {
