@@ -35,6 +35,9 @@ jobs:
           if 'com.google.android.gms.ads.APPLICATION_ID' not in s:
               s=re.sub(r'(<application\b[^>]*>)', lambda m: m.group(1)+'\n        '+meta, s, count=1)
           p.write_text(s)
+          if 'com.google.android.gms.ads.APPLICATION_ID' not in p.read_text():
+              raise SystemExit('ERRO: App ID do AdMob não foi inserido no AndroidManifest.xml')
+          print('App ID do AdMob confirmado no AndroidManifest.xml')
           PY
       - name: Confirmar identificador Android
         working-directory: novelplay_v3/android
