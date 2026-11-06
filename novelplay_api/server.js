@@ -255,7 +255,7 @@ async function getReelShortBuildId(force = false) {
   if (!force && reelShortBuildId && Date.now() - reelShortBuildIdFetchedAt < 30 * 60 * 1000) {
     return reelShortBuildId;
   }
-  const response = await fetch('https://www.reelshort.com/id', {
+  const response = await fetch('https://www.reelshort.com/pt', {
     headers: reelShortHeaders,
     signal: AbortSignal.timeout(12000)
   });
@@ -281,7 +281,7 @@ function normalizeReelShortSlug(value) {
 
 async function reelShortJson(path, retry = true) {
   const buildId = await getReelShortBuildId();
-  const url = 'https://www.reelshort.com/_next/data/' + encodeURIComponent(buildId) + '/id' + path;
+  const url = 'https://www.reelshort.com/_next/data/' + encodeURIComponent(buildId) + '/pt' + path;
   const response = await fetch(url, {
     headers: reelShortHeaders,
     signal: AbortSignal.timeout(15000)
