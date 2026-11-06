@@ -334,10 +334,15 @@ app.get('/reelshort/episodes/:bookId', reelShortLimiter, async (req, res) => {
     const data = await reelShortJson('/movie/' + encodeURIComponent(slug) + '.json?' + new URLSearchParams({ slug }));
     const details = data && data.pageProps && data.pageProps.data ? data.pageProps.data : {};
     const sourceEpisodes = Array.isArray(details.online_base) ? details.online_base : [];
-    const episodes = sourceEpisodes.map(item => ({
-      episode: Number(item.serial_number || 0),
-      chapter_id: String(item.chapter_id || '')
-    })).filter(item => Number.isSafeInteger(item.episode) && item.episode > 0 && item.chapter_id);
+    const paidStart = Number(details.paid_start);
+    const isPaid = Number(details.is_paid);
+    const episodes = sourceEpisodes.map(item => {
+      const number = Number(item.serial_number || 0);
+      const free = isPaid === 0 && Number.isSafeInteger(paidStart) && paidStart === 0
+        ? true
+        : Number.isSafeInteger(paidStart) && paidStart > 0 && number < paidStart;
+      return { episode: number, chapter_id: String(item.chapter_id || ''), free };
+    }).filter(item => Number.isSafeInteger(item.episode) && item.episode > 0 && item.chapter_id);
     return res.json({
       book: {
         book_title: String(details.book_title || ''),
@@ -440,14 +445,16 @@ app.post('/admin/catalog/import', authRequired, async (req, res) => {
     normalized.push({ number, title: episodeTitle, sourceEpisodeId, sourceIsFree, videoUrl: '' });
   }
   normalized.sort((a, b) => a.number - b.number);
-  // Resolve URLs em pequenos lotes para evitar sobrecarregar o serviço de origem.
-  for (let offset = 0; offset < normalized.length; offset += 4) {
-    const batch = normalized.slice(offset, offset + 4);
+  // Conecta automaticamente somente episódios identificados como gratuitos.
+  // Os episódios pagos permanecem no catálogo e recebem o link manual do administrador.
+  const freeEpisodes = normalized.filter(episode => episode.sourceIsFree === true);
+  for (let offset = 0; offset < freeEpisodes.length; offset += 4) {
+    const batch = freeEpisodes.slice(offset, offset + 4);
     const resolved = await Promise.all(batch.map(async episode => {
       try {
         return await getReelShortVideoUrl(episode.number, sourceFilteredTitle, sourceBookId, episode.sourceEpisodeId);
       } catch (error) {
-        console.warn('Não foi possível consultar o vídeo do episódio', episode.number, error.message);
+        console.warn('Não foi possível consultar o vídeo gratuito do episódio', episode.number, error.message);
         return '';
       }
     }));

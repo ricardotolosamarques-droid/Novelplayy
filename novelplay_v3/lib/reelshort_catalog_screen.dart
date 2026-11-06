@@ -67,7 +67,7 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
               value: authorizedPlayback,
               onChanged: (value) => setDialogState(() => authorizedPlayback = value == true),
               controlAffinity: ListTileControlAffinity.leading,
-              title: const Text('Tenho autorização para reproduzir e distribuir os vídeos desta obra.'),
+              title: const Text('Tenho autorização para reproduzir e distribuir os vídeos gratuitos conectados automaticamente.'),
             ),
           ])),
           actions: [
@@ -278,12 +278,14 @@ class _ReelShortSeriesScreen extends StatefulWidget {
 }
 
 class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
-  Future<void> _addEpisode() async {
-    final number = TextEditingController(), title = TextEditingController(), url = TextEditingController();
+  Future<void> _addEpisode({Map<String, dynamic>? existing}) async {
+    final number = TextEditingController(text: existing == null ? '' : (existing['number'] ?? '').toString());
+    final title = TextEditingController(text: existing == null ? '' : (existing['title'] ?? '').toString());
+    final url = TextEditingController(text: existing == null ? '' : (existing['videoUrl'] ?? '').toString());
     final accepted = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Adicionar episódio'),
+        title: Text(existing == null ? 'Adicionar episódio' : 'Adicionar link do episódio ${existing['number']}'),
         content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(controller: number, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Número do episódio')),
           const SizedBox(height: 10),
@@ -365,7 +367,15 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
                       : episode['sourceIsFree'] == false
                           ? 'Episódio pago no ReelShort · vídeo não conectado'
                           : 'Metadados importados · vídeo não conectado'),
-              trailing: Icon((episode['videoUrl'] ?? '').toString().isEmpty ? Icons.info_outline : Icons.play_circle_outline, color: const Color(0xffff6b9d)),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (widget.isAdmin)
+                  IconButton(
+                    tooltip: 'Adicionar ou alterar link',
+                    icon: const Icon(Icons.edit_link, color: Color(0xffff6b9d)),
+                    onPressed: () => _addEpisode(existing: episode),
+                  ),
+                Icon((episode['videoUrl'] ?? '').toString().isEmpty ? Icons.lock_outline : Icons.play_circle_outline, color: const Color(0xffff6b9d)),
+              ]),
               onTap: (episode['videoUrl'] ?? '').toString().isEmpty ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => _AuthorizedHlsPlayer(
                 title: (episode['title'] ?? 'Episódio $number').toString(),
                 url: (episode['videoUrl'] ?? '').toString(),
