@@ -21,9 +21,13 @@ jobs:
       - name: Gerar estrutura Android
         working-directory: novelplay_v3
         run: flutter create --org com.example --project-name novelinha_app --platforms android .
-      - name: Permitir acesso à internet
+      - name: Configurar permissões e App ID de teste do AdMob
         run: |
-          sed -i '/<application/i\\    <uses-permission android:name="android.permission.INTERNET" />' novelplay_v3/android/app/src/main/AndroidManifest.xml
+          set -euo pipefail
+          MANIFEST=novelplay_v3/android/app/src/main/AndroidManifest.xml
+          sed -i '/<application/i\\    <uses-permission android:name="android.permission.INTERNET" />' "$MANIFEST"
+          sed -i '/<application/a\\        <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713" />' "$MANIFEST"
+          grep -q 'com.google.android.gms.ads.APPLICATION_ID' "$MANIFEST"
       - name: Confirmar identificador Android
         working-directory: novelplay_v3/android
         shell: bash
