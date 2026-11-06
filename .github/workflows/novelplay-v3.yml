@@ -50,6 +50,44 @@ jobs:
         run: |
           set -euo pipefail
           grep -R -E 'applicationId.*com\.example\.novelinha_app|namespace.*com\.example\.novelinha_app' app
+      - name: Corrigir inicialização nativa do AdMob e WorkManager
+        working-directory: novelplay_v3
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          tree = ET.parse(manifest)
+          root = tree.getroot()
+          android = "{http://schemas.android.com/apk/res/android}"
+          ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
+          app = root.find("application")
+          if app is None:
+              raise SystemExit("AndroidManifest sem elemento application")
+          app_id_name = "com.google.android.gms.ads.APPLICATION_ID"
+          app_id = next((node for node in app.findall("meta-data")
+                         if node.get(android + "name") == app_id_name), None)
+          if app_id is None:
+              app_id = ET.SubElement(app, "meta-data")
+          app_id.set(android + "name", app_id_name)
+          # ID oficial de teste do Google; não exibe anúncios comerciais.
+          app_id.set(android + "value", "ca-app-pub-3940256099942544~3347511713")
+          tree.write(manifest, encoding="utf-8", xml_declaration=True)
+          ET.parse(manifest)
+
+          gradle = Path("android/app/build.gradle.kts")
+          if not gradle.exists():
+              raise SystemExit("build.gradle.kts não encontrado após flutter create")
+          content = gradle.read_text()
+          dependency = 'implementation("androidx.work:work-runtime:2.11.2")'
+          if dependency not in content:
+              content += "\n\ndependencies {\n    " + dependency + "\n}\n"
+          gradle.write_text(content)
+          print("AdMob App ID de teste configurado e WorkManager fixado em 2.11.2.")
+          PY
       - name: Criar keystore de depuração
         shell: bash
         run: |
