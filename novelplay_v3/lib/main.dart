@@ -1,6 +1,4 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
-import 'rewarded_ads.dart';
 import 'package:video_player/video_player.dart';
 import 'catalog.dart';
 import 'dramabos_screen.dart';
@@ -10,7 +8,6 @@ import 'auth.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  unawaited(NovelRewardedAds.initialize());
   runApp(const NovelPlay());
 }
 
