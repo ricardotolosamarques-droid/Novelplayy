@@ -98,6 +98,23 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
   bool _openingSeries = false;
   late Future<List<dynamic>> _content = _loadSeries();
   late Future<List<WatchHistoryEntry>> _historyFuture = _loadHistory();
+  Timer? _profileClock;
+
+  @override
+  void initState() {
+    super.initState();
+    _profileClock = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && _bottomIndex == 4 && _selectedFolderId == null) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _profileClock?.cancel();
+    super.dispose();
+  }
 
   Future<List<WatchHistoryEntry>> _loadHistory() async {
     final prefs = await SharedPreferences.getInstance();
