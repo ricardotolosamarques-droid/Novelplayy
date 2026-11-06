@@ -112,7 +112,16 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
           break;
         }
       }
-      if (book == null) throw Exception('Novelinha não encontrada no catálogo público do ReelShort.');
+      // Links /pt/full-episodes/<slug>-<id> já identificam a obra diretamente.
+      // A pesquisa pública pode não indexar títulos localizados; nesse caso,
+      // consulta os detalhes pelo slug e ID do próprio link.
+      book ??= <String, dynamic>{
+        'book_id': bookId,
+        'book_title': titleSlug.replaceAll('-', ' '),
+        'filtered_title': titleSlug,
+        'book_pic': '',
+        'special_desc': '',
+      };
       final episodesUri = Uri.parse('$_catalogApi/reelshort/episodes/' + Uri.encodeComponent(bookId));
       final episodeData = await Sources.request(episodesUri.replace(queryParameters: {
         'filtered_title': (book['filtered_title'] ?? titleSlug).toString(),
