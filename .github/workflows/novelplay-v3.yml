@@ -23,22 +23,7 @@ jobs:
         run: flutter create --org com.example --project-name novelinha_app --platforms android .
       - name: Permitir acesso à internet
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          p=Path('novelplay_v3/android/app/src/main/AndroidManifest.xml')
-          s=p.read_text()
-          if 'android.permission.INTERNET' not in s:
-              s=s.replace('<application','<uses-permission android:name="android.permission.INTERNET" />\n    <application',1)
-          app_id='ca-app-pub-3940256099942544~3347511713'
-          meta=f'<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="{app_id}" />'
-          if 'com.google.android.gms.ads.APPLICATION_ID' not in s:
-              s=re.sub(r'(<application\b[^>]*>)', lambda m: m.group(1)+'\n        '+meta, s, count=1)
-          p.write_text(s)
-          if 'com.google.android.gms.ads.APPLICATION_ID' not in p.read_text():
-              raise SystemExit('ERRO: App ID do AdMob não foi inserido no AndroidManifest.xml')
-          print('App ID do AdMob confirmado no AndroidManifest.xml')
-          PY
+          sed -i '/<application/i\\    <uses-permission android:name="android.permission.INTERNET" />' novelplay_v3/android/app/src/main/AndroidManifest.xml
       - name: Confirmar identificador Android
         working-directory: novelplay_v3/android
         shell: bash
