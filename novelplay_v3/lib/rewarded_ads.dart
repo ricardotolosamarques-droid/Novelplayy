@@ -15,7 +15,7 @@ class NovelRewardedAds {
     await _initialize();
 
     final result = Completer<bool>();
-    await RewardedAd.load(
+    RewardedAd.load(
       adUnitId: 'ca-app-pub-3940256099942544/5224354917',
       request: const AdRequest(),
       rewardedAdLoadCallback: RewardedAdLoadCallback(
