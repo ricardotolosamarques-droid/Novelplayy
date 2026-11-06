@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'series_unlocks.dart';
+import 'rewarded_ads.dart';
 
 const _folderId = '1O28a3-3bmKkVj_3dS9HlWX0Owyn3eFts';
 const _apiKey = String.fromEnvironment('DRIVE_API_KEY');
@@ -243,8 +244,10 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
           ..addAll(savedUnlocks);
       }
       if (!_unlockedSeriesIds.contains(series.id)) {
-        // Anúncios temporariamente desativados para evitar o crash nativo.
-        // Mantém a navegação utilizável até a integração de anúncios ser corrigida.
+        final earnedReward = await NovelRewardedAds.showForSeriesUnlock();
+        if (!earnedReward) {
+          throw Exception('Assista ao anúncio completo para desbloquear esta novelinha. Se o anúncio não carregar, tente novamente mais tarde.');
+        }
         await NovelSeriesUnlocks.unlock(series.id);
         _unlockedSeriesIds.add(series.id);
       }
