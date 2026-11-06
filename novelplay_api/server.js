@@ -78,6 +78,8 @@ async function initializeDatabase() {
   // Imported metadata can exist before an authorized playback URL is supplied.
   await pool.query("ALTER TABLE catalog_episodes ALTER COLUMN video_url SET DEFAULT ''");
   await pool.query('ALTER TABLE catalog_episodes ALTER COLUMN video_url DROP NOT NULL');
+  await pool.query('ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS source_episode_id TEXT NOT NULL DEFAULT \'\'');
+  await pool.query('ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS source_is_free BOOLEAN');
 
   const adminUsername = (process.env.ADMIN_USERNAME || 'Admin').trim();
   const adminEmail = (process.env.ADMIN_EMAIL || 'admin@novelplay.local').trim().toLowerCase();
@@ -237,7 +239,7 @@ app.get('/catalog', async (_req, res) => {
       'SELECT id, title, synopsis, cover_url, created_at FROM catalog_series ORDER BY created_at DESC, id DESC'
     );
     const episodeResult = await pool.query(
-      'SELECT id, series_id, episode_number, title, video_url FROM catalog_episodes ORDER BY episode_number ASC'
+      'SELECT id, series_id, episode_number, title, video_url, source_episode_id, source_is_free FROM catalog_episodes ORDER BY episode_number ASC'
     );
     const bySeries = new Map();
     for (const row of seriesResult.rows) {
@@ -255,7 +257,9 @@ app.get('/catalog', async (_req, res) => {
         id: String(row.id),
         number: row.episode_number,
         title: row.title,
-        videoUrl: row.video_url
+        videoUrl: row.video_url,
+        sourceEpisodeId: row.source_episode_id,
+        sourceIsFree: row.source_is_free
       });
     }
     return res.json({ series: Array.from(bySeries.values()) });
@@ -301,12 +305,14 @@ app.post('/admin/catalog/import', authRequired, async (req, res) => {
   for (const item of episodes) {
     const number = Number(item && item.number);
     const episodeTitle = String(item && item.title || '').trim();
+    const sourceEpisodeId = String(item && item.sourceEpisodeId || '').trim();
+    const sourceIsFree = typeof (item && item.isFree) === 'boolean' ? item.isFree : null;
     if (!Number.isSafeInteger(number) || number < 1 || number > 100000 ||
-        !episodeTitle || episodeTitle.length > 180 || seen.has(number)) {
+        !episodeTitle || episodeTitle.length > 180 || sourceEpisodeId.length > 180 || seen.has(number)) {
       return res.status(400).json({ error: 'A lista contém um episódio inválido ou repetido.' });
     }
     seen.add(number);
-    normalized.push({ number, title: episodeTitle });
+    normalized.push({ number, title: episodeTitle, sourceEpisodeId, sourceIsFree });
   }
   normalized.sort((a, b) => a.number - b.number);
   const client = await pool.connect();
@@ -324,11 +330,13 @@ app.post('/admin/catalog/import', authRequired, async (req, res) => {
     const seriesId = seriesResult.rows[0].id;
     for (const episode of normalized) {
       await client.query(
-        `INSERT INTO catalog_episodes (series_id, episode_number, title, video_url)
-         VALUES ($1, $2, $3, '')
+        `INSERT INTO catalog_episodes (series_id, episode_number, title, video_url, source_episode_id, source_is_free)
+         VALUES ($1, $2, $3, '', $4, $5)
          ON CONFLICT (series_id, episode_number) DO UPDATE
-           SET title = EXCLUDED.title`,
-        [seriesId, episode.number, episode.title]
+           SET title = EXCLUDED.title,
+               source_episode_id = EXCLUDED.source_episode_id,
+               source_is_free = EXCLUDED.source_is_free`,
+        [seriesId, episode.number, episode.title, episode.sourceEpisodeId, episode.sourceIsFree]
       );
     }
     await client.query('COMMIT');

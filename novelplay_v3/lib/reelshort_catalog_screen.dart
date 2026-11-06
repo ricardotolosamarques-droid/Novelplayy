@@ -113,7 +113,12 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
       for (final item in episodeData['episodes'] as List) {
         if (item is! Map) continue;
         final number = int.tryParse((item['episode'] ?? '').toString());
-        if (number != null && number > 0) episodes.add({'number': number, 'title': 'Episódio $number'});
+        if (number != null && number > 0) episodes.add({
+          'number': number,
+          'title': 'Episódio $number',
+          'sourceEpisodeId': (item['chapter_id'] ?? '').toString(),
+          'isFree': item['free'] == true,
+        });
       }
       if (episodes.isEmpty) throw Exception('Nenhum episódio foi encontrado para essa novelinha.');
       final prefs = await SharedPreferences.getInstance();
@@ -323,7 +328,13 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
             return ListTile(
               leading: CircleAvatar(backgroundColor: const Color(0xff38202a), child: Text('$number')),
               title: Text((episode['title'] ?? 'Episódio $number').toString()),
-              subtitle: Text((episode['videoUrl'] ?? '').toString().isEmpty ? 'Metadados importados · vídeo não conectado' : 'Assistir no NovelPlay'),
+              subtitle: Text((episode['videoUrl'] ?? '').toString().isNotEmpty
+                  ? 'Assistir no NovelPlay'
+                  : episode['sourceIsFree'] == true
+                      ? 'Episódio gratuito · vídeo não conectado'
+                      : episode['sourceIsFree'] == false
+                          ? 'Episódio pago no ReelShort · vídeo não conectado'
+                          : 'Metadados importados · vídeo não conectado'),
               trailing: Icon((episode['videoUrl'] ?? '').toString().isEmpty ? Icons.info_outline : Icons.play_circle_outline, color: const Color(0xffff6b9d)),
               onTap: (episode['videoUrl'] ?? '').toString().isEmpty ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => _AuthorizedHlsPlayer(
                 title: (episode['title'] ?? 'Episódio $number').toString(),
