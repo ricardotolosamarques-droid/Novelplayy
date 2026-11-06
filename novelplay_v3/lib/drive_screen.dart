@@ -194,6 +194,30 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
     return episodes;
   }
 
+  Widget _homeCategory(String label, int index) {
+    final selected = _tabIndex == index;
+    return Padding(
+      padding: const EdgeInsets.only(right: 22),
+      child: InkWell(
+        onTap: () => setState(() => _tabIndex = index),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(label, style: TextStyle(
+              color: selected ? Colors.white : const Color(0xffaaa4b4),
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.4,
+            )),
+            const SizedBox(height: 7),
+            if (selected) Container(width: 24, height: 3,
+              decoration: BoxDecoration(color: const Color(0xffff315b), borderRadius: BorderRadius.circular(4))),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _openSeries(DriveSeries series) {
     setState(() {
       _selectedFolderId = series.id;
@@ -293,119 +317,130 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 42, height: 42,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(colors: [Color(0xffff6da8), Color(0xff9c3f83)]),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 29),
-                        ),
-                        const SizedBox(width: 11),
-                        const Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('NOVELINHA', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, letterSpacing: 2.0)),
-                            Text('HISTÓRIAS QUE PRENDEM', style: TextStyle(fontSize: 8, color: Color(0xffff8db8), letterSpacing: 1.6, fontWeight: FontWeight.w800)),
-                          ],
-                        ),
-                        const Spacer(),
-                        Container(
-                          decoration: BoxDecoration(color: const Color(0xff211c2a), borderRadius: BorderRadius.circular(14)),
-                          child: IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh_rounded, color: Colors.white70), tooltip: 'Atualizar'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 27),
-                    const Text('SEU PRÓXIMO VÍCIO', style: TextStyle(color: Color(0xffff83b0), fontSize: 10, letterSpacing: 2.0, fontWeight: FontWeight.w900)),
-                    const SizedBox(height: 8),
-                    const Text('Uma história\npara maratonar.', style: TextStyle(fontSize: 31, height: 1.04, fontWeight: FontWeight.w900, letterSpacing: -0.8)),
-                    const SizedBox(height: 9),
-                    Text('${series.length} histórias esperando por você', style: const TextStyle(color: Color(0xffaaa4b4), fontSize: 13)),
-                    if (_tabIndex != 2) const SizedBox(height: 20),
-                    if (_tabIndex != 2) GestureDetector(
-                      onTap: series.isEmpty ? null : () => _openSeries(series.first),
-                      child: Container(
-                      height: 174,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(24),
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft, end: Alignment.bottomRight,
-                          colors: [Color(0xff9d3d70), Color(0xff512b59), Color(0xff211c32)],
-                        ),
-                        boxShadow: const [BoxShadow(color: Color(0x553f1738), blurRadius: 22, offset: Offset(0, 10))],
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          if (series.isNotEmpty && series.first.coverId != null)
-                            Image.network(
-                              'https://drive.google.com/uc?export=view&id=${series.first.coverId}',
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xff512b59)),
-                            ),
-                          const DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.centerRight,
-                                end: Alignment.centerLeft,
-                                colors: [Color(0x22000000), Color(0xdd09070d)],
-                              ),
-                            ),
-                          ),
-                          const Positioned(right: -8, top: -28, child: Icon(Icons.local_movies_rounded, size: 190, color: Color(0x22ffffff))),
-                          Positioned(right: 18, bottom: 16, child: Transform.rotate(angle: -0.12, child: const Icon(Icons.auto_awesome, size: 68, color: Color(0x55ffffff)))),
-                          Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                  decoration: BoxDecoration(color: const Color(0x33ffffff), borderRadius: BorderRadius.circular(30)),
-                                  child: const Text('CATÁLOGO EXCLUSIVO', style: TextStyle(fontSize: 9, letterSpacing: 1.4, fontWeight: FontWeight.w900)),
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  series.isEmpty ? 'Drama, romance\ne reviravoltas.' : series.first.name,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 23, height: 1.05, fontWeight: FontWeight.w900),
-                                ),
-                                const SizedBox(height: 9),
-                                Row(
-                                  children: [
-                                    const Icon(Icons.play_circle_fill_rounded, size: 17, color: Color(0xffffc4da)),
-                                    const SizedBox(width: 6),
-                                    Text('${series.length} títulos para descobrir', style: const TextStyle(fontSize: 11, color: Color(0xfff4dce8))),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    ),
-                    if (_tabIndex != 2) const SizedBox(height: 24),
-                    if (_tabIndex != 2) TextField(
+                    TextField(
                       onChanged: (value) => setState(() => _searchQuery = value),
                       style: const TextStyle(color: Colors.white, fontSize: 14),
                       decoration: InputDecoration(
-                        hintText: 'Qual história você procura?',
-                        hintStyle: const TextStyle(color: Color(0xff827c8c), fontSize: 13),
+                        hintText: 'Buscar novelinhas...',
+                        hintStyle: const TextStyle(color: Color(0xffaaa4b4), fontSize: 13),
                         prefixIcon: const Icon(Icons.search_rounded, color: Color(0xffff78aa)),
-                        filled: true, fillColor: const Color(0xff211e2a),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 17),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(17), borderSide: const BorderSide(color: Color(0xff302a39))),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(17), borderSide: const BorderSide(color: Color(0xffff6b9d), width: 1.2)),
+                        suffixIcon: IconButton(
+                          tooltip: 'Atualizar catálogo',
+                          onPressed: _refresh,
+                          icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xff29252d),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(15),
+                          borderSide: const BorderSide(color: Color(0xff494047)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(15),
+                          borderSide: const BorderSide(color: Color(0xffff6b9d), width: 1.2),
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 26),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      height: 38,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: [
+                          _homeCategory('POPULAR', 0),
+                          _homeCategory('NOVO', 1),
+                          _homeCategory('MINHA LISTA', 2),
+                        ],
+                      ),
+                    ),
+                    if (_tabIndex != 2) const SizedBox(height: 14),
+                    if (_tabIndex != 2)
+                      GestureDetector(
+                        onTap: series.isEmpty ? null : () => _openSeries(series.first),
+                        child: Container(
+                          height: 390,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20),
+                            color: const Color(0xff30202b),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              if (series.isNotEmpty && series.first.coverId != null)
+                                Image.network(
+                                  'https://drive.google.com/uc?export=view&id=${series.first.coverId}',
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xff512b59)),
+                                )
+                              else
+                                const DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [Color(0xffa33d63), Color(0xff211c32)],
+                                    ),
+                                  ),
+                                  child: Icon(Icons.movie_filter_rounded, size: 150, color: Color(0x33ffffff)),
+                                ),
+                              const DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [Color(0x00000000), Color(0x22000000), Color(0xee050505)],
+                                    stops: [0.28, 0.55, 1],
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                left: 18,
+                                right: 18,
+                                bottom: 22,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xffd52b58),
+                                        borderRadius: BorderRadius.circular(5),
+                                      ),
+                                      child: const Text('DESTAQUE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      series.isEmpty ? 'Novelinhas para assistir' : series.first.name,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontSize: 27, height: 1.05, fontWeight: FontWeight.w900),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    const Text('Romance • Drama • Histórias curtas',
+                                      style: TextStyle(color: Colors.white70, fontSize: 12)),
+                                    const SizedBox(height: 17),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 13),
+                                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(7)),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.play_arrow_rounded, color: Colors.black, size: 22),
+                                          SizedBox(width: 7),
+                                          Text('REPRODUZIR', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, letterSpacing: 0.4)),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 24),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
