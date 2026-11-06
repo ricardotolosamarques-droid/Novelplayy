@@ -7,9 +7,14 @@ class NovelRewardedAds {
   static const String _testRewardedAndroid = 'ca-app-pub-3940256099942544/5224354917';
   static RewardedAd? _loadedAd;
   static bool _loading = false;
+  static bool _initialized = false;
 
+  // O SDK só é inicializado quando o usuário realmente solicita um anúncio.
+  // Assim, uma falha do serviço de anúncios não impede o app de abrir.
   static Future<void> initialize() async {
+    if (_initialized) return;
     await MobileAds.instance.initialize();
+    _initialized = true;
     _preload();
   }
 
@@ -34,6 +39,11 @@ class NovelRewardedAds {
 
   /// Retorna true somente quando o SDK informa que o usuário ganhou a recompensa.
   static Future<bool> showForSeriesUnlock() async {
+    try {
+      await initialize();
+    } catch (_) {
+      return false;
+    }
     final completer = Completer<bool>();
     final ad = _loadedAd;
     _loadedAd = null;
