@@ -85,11 +85,10 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
       if (bookId.length < 6 || !RegExp(r'^[A-Za-z0-9_]+$').hasMatch(bookId)) {
         throw Exception('O link não contém um identificador de novelinha válido.');
       }
-      final searchUri = Sources.proxyEndpoint('/search');
-      if (searchUri == null) throw Exception('Serviço de metadados não configurado.');
-      final searchData = await Sources.request(searchUri.replace(queryParameters: {
+      final searchUri = Uri.parse('$_catalogApi/reelshort/search').replace(queryParameters: {
         'keywords': titleSlug.replaceAll('-', ' '),
-      }));
+      });
+      final searchData = await Sources.request(searchUri);
       if (searchData is! Map || searchData['results'] is! List) {
         throw Exception('O catálogo não retornou os dados da novelinha.');
       }
@@ -101,13 +100,18 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
         }
       }
       if (book == null) throw Exception('Novelinha não encontrada no catálogo público do ReelShort.');
-      final episodesUri = Sources.proxyEndpoint('/episodes/' + Uri.encodeComponent(bookId));
-      if (episodesUri == null) throw Exception('Serviço de metadados não configurado.');
+      final episodesUri = Uri.parse('$_catalogApi/reelshort/episodes/' + Uri.encodeComponent(bookId));
       final episodeData = await Sources.request(episodesUri.replace(queryParameters: {
         'filtered_title': (book['filtered_title'] ?? titleSlug).toString(),
       }));
       if (episodeData is! Map || episodeData['episodes'] is! List) {
         throw Exception('Não foi possível obter a lista de episódios.');
+      }
+      final sourceBook = episodeData['book'];
+      if (sourceBook is Map) {
+        if ((sourceBook['book_title'] ?? '').toString().trim().isNotEmpty) book['book_title'] = sourceBook['book_title'];
+        if ((sourceBook['special_desc'] ?? '').toString().trim().isNotEmpty) book['special_desc'] = sourceBook['special_desc'];
+        if ((sourceBook['book_pic'] ?? '').toString().trim().isNotEmpty) book['book_pic'] = sourceBook['book_pic'];
       }
       final episodes = <Map<String, dynamic>>[];
       for (final item in episodeData['episodes'] as List) {
@@ -117,7 +121,7 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
           'number': number,
           'title': 'Episódio $number',
           'sourceEpisodeId': (item['chapter_id'] ?? '').toString(),
-          'isFree': item['free'] == true,
+          'isFree': item['free'] == true ? true : (item['free'] == false ? false : null),
         });
       }
       if (episodes.isEmpty) throw Exception('Nenhum episódio foi encontrado para essa novelinha.');
