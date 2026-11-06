@@ -52,6 +52,29 @@ async function initializeDatabase() {
     )
   `);
 
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS catalog_series (
+      id BIGSERIAL PRIMARY KEY,
+      title VARCHAR(180) NOT NULL UNIQUE,
+      synopsis TEXT NOT NULL DEFAULT '',
+      cover_url TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS catalog_episodes (
+      id BIGSERIAL PRIMARY KEY,
+      series_id BIGINT NOT NULL REFERENCES catalog_series(id) ON DELETE CASCADE,
+      episode_number INTEGER NOT NULL CHECK (episode_number > 0),
+      title VARCHAR(180) NOT NULL,
+      video_url TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (series_id, episode_number)
+    )
+  `);
+
   const adminUsername = (process.env.ADMIN_USERNAME || 'Admin').trim();
   const adminEmail = (process.env.ADMIN_EMAIL || 'admin@novelplay.local').trim().toLowerCase();
   const adminHash = await bcrypt.hash(process.env.ADMIN_PASSWORD, 12);
@@ -190,6 +213,102 @@ app.post('/unlocks', authRequired, async (req, res) => {
   } catch (error) {
     console.error('Erro ao salvar desbloqueio:', error.message);
     return res.status(500).json({ error: 'Não foi possível salvar o desbloqueio.' });
+  }
+});
+
+
+function isHttpsUrl(value) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'https:' && Boolean(parsed.hostname) && !parsed.username && !parsed.password;
+  } catch (_) {
+    return false;
+  }
+}
+
+// Catálogo público: somente séries e episódios publicados pelo administrador.
+app.get('/catalog', async (_req, res) => {
+  try {
+    const seriesResult = await pool.query(
+      'SELECT id, title, synopsis, cover_url, created_at FROM catalog_series ORDER BY created_at DESC, id DESC'
+    );
+    const episodeResult = await pool.query(
+      'SELECT id, series_id, episode_number, title, video_url FROM catalog_episodes ORDER BY episode_number ASC'
+    );
+    const bySeries = new Map();
+    for (const row of seriesResult.rows) {
+      bySeries.set(String(row.id), {
+        id: String(row.id),
+        title: row.title,
+        synopsis: row.synopsis,
+        coverUrl: row.cover_url,
+        episodes: []
+      });
+    }
+    for (const row of episodeResult.rows) {
+      const series = bySeries.get(String(row.series_id));
+      if (series) series.episodes.push({
+        id: String(row.id),
+        number: row.episode_number,
+        title: row.title,
+        videoUrl: row.video_url
+      });
+    }
+    return res.json({ series: Array.from(bySeries.values()) });
+  } catch (error) {
+    console.error('Erro ao carregar catálogo autorizado:', error.message);
+    return res.status(500).json({ error: 'Não foi possível carregar o catálogo.' });
+  }
+});
+
+app.post('/admin/catalog/series', authRequired, async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Acesso exclusivo do administrador.' });
+  const title = String(req.body.title || '').trim();
+  const synopsis = String(req.body.synopsis || '').trim();
+  const coverUrl = String(req.body.coverUrl || '').trim();
+  if (!title || title.length > 180) return res.status(400).json({ error: 'O nome da série é obrigatório e deve ter até 180 caracteres.' });
+  if (synopsis.length > 4000) return res.status(400).json({ error: 'A descrição é muito longa.' });
+  if (coverUrl && (!isHttpsUrl(coverUrl) || coverUrl.length > 2000)) return res.status(400).json({ error: 'O link da capa precisa ser HTTPS válido.' });
+  try {
+    const result = await pool.query(
+      'INSERT INTO catalog_series (title, synopsis, cover_url) VALUES ($1, $2, $3) RETURNING id, title',
+      [title, synopsis, coverUrl]
+    );
+    return res.status(201).json({ series: { id: String(result.rows[0].id), title: result.rows[0].title } });
+  } catch (error) {
+    if (error.code === '23505') return res.status(409).json({ error: 'Já existe uma série com esse nome.' });
+    console.error('Erro ao criar série:', error.message);
+    return res.status(500).json({ error: 'Não foi possível criar a série.' });
+  }
+});
+
+app.post('/admin/catalog/series/:seriesId/episodes', authRequired, async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Acesso exclusivo do administrador.' });
+  const seriesId = Number(req.params.seriesId);
+  const number = Number(req.body.number);
+  const title = String(req.body.title || '').trim();
+  const videoUrl = String(req.body.videoUrl || '').trim();
+  if (!Number.isSafeInteger(seriesId) || seriesId < 1) return res.status(400).json({ error: 'Série inválida.' });
+  if (!Number.isSafeInteger(number) || number < 1 || number > 100000) return res.status(400).json({ error: 'Número do episódio inválido.' });
+  if (!title || title.length > 180) return res.status(400).json({ error: 'Título do episódio obrigatório (até 180 caracteres).' });
+  if (!isHttpsUrl(videoUrl) || videoUrl.length > 8000) return res.status(400).json({ error: 'Informe um link HTTPS válido.' });
+  try {
+    const result = await pool.query(
+      `INSERT INTO catalog_episodes (series_id, episode_number, title, video_url)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (series_id, episode_number) DO UPDATE
+         SET title = EXCLUDED.title, video_url = EXCLUDED.video_url
+       RETURNING id, series_id, episode_number, title`,
+      [seriesId, number, title, videoUrl]
+    );
+    const row = result.rows[0];
+    return res.status(200).json({ episode: {
+      id: String(row.id), seriesId: String(row.series_id), number: row.episode_number, title: row.title
+    }});
+  } catch (error) {
+    if (error.code === '23503') return res.status(404).json({ error: 'Série não encontrada.' });
+    console.error('Erro ao salvar episódio:', error.message);
+    return res.status(500).json({ error: 'Não foi possível salvar o episódio.' });
   }
 });
 
