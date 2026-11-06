@@ -24,44 +24,34 @@ jobs:
               except urllib.error.HTTPError as e: return e.code,e.read().decode('utf8','replace')
           m=None
           for home in (base+'/pt',base+'/pt/'):
-              status,html=get(home); print('HOME',home,'STATUS',status,'LEN',len(html))
-              m=re.search(r'"buildId"\s*:\s*"([^"]+)"',html)
+              status,html=get(home)
+              print('HOME',home,'STATUS',status,'LEN',len(html))
+              m=re.search(r'"buildId"\\s*:\\s*"([^"]+)"',html)
               if m: break
           if not m:
               print('BUILD_ID_NOT_FOUND'); print(html[:500]); raise SystemExit(1)
-          bid=m.group(1); print('BUILD_ID',bid)
+          bid=m.group(1)
+          print('BUILD_ID',bid)
           slugs=[title+'-'+book_id, 'babá-para-o-meu-valentão-gostosão-'+book_id]
+          def walk(v,path='$',depth=0):
+              if depth>7: return
+              if isinstance(v,dict):
+                  if v: print('OBJECT',path,'KEYS',list(v.keys())[:100])
+                  for k,x in v.items(): walk(x,path+'.'+str(k),depth+1)
+              elif isinstance(v,list):
+                  print('LIST',path,'COUNT',len(v),'SAMPLE',str(v[:2])[:1500])
+                  for j,x in enumerate(v[:2]): walk(x,path+f'[{j}]',depth+1)
           for slug in slugs:
               for route in ('/pt/movie/','/pt/full-episodes/','/movie/','/full-episodes/'):
                   url=f'{base}/_next/data/{bid}{route}{slug}.json?slug={slug}'
                   status,body=get(url)
-                  print('ROUTE',route,'SLUG',slug[:20],'STATUS',status,'LEN',len(body),'CONTENT',body[:180].replace('\\n',' '))
+                  print('ROUTE',route,'SLUG',slug[:24],'STATUS',status,'LEN',len(body),'CONTENT',body[:180].replace('\\n',' '))
                   if status==200:
                       try:
-                          data=json.loads(body); props=data.get('pageProps',{})
+                          data=json.loads(body)
+                          props=data.get('pageProps',{})
                           print('TOP_KEYS',list(data.keys()),'PROPS_KEYS',list(props.keys()))
-                          def walk(v,path='
-                          info=props.get('data') or props.get('fallback') or {}
-                          print('DATA_TYPE',type(info).__name__,'DATA_KEYS',list(info.keys())[:60] if isinstance(info,dict) else '')
-                          if isinstance(info,dict):
-                              for key,val in info.items():
-                                  if isinstance(val,list): print('ARRAY',key,'COUNT',len(val),'FIRST',str(val[:1])[:500])
-                      except Exception as e: print('JSON_ERROR',str(e))
-          PY
-,depth=0):
-                              if depth>7: return
-                              if isinstance(v,dict):
-                                  keys=list(v.keys())
-                                  if keys: print('OBJECT',path,'KEYS',keys[:100])
-                                  for k,x in v.items(): walk(x,path+'.'+str(k),depth+1)
-                              elif isinstance(v,list):
-                                  print('LIST',path,'COUNT',len(v),'SAMPLE',str(v[:2])[:1500])
-                                  for j,x in enumerate(v[:2]): walk(x,path+f'[{j}]',depth+1)
                           walk(props)
-                          info=props.get('data') or props.get('fallback') or {}
-                          print('DATA_TYPE',type(info).__name__,'DATA_KEYS',list(info.keys())[:60] if isinstance(info,dict) else '')
-                          if isinstance(info,dict):
-                              for key,val in info.items():
-                                  if isinstance(val,list): print('ARRAY',key,'COUNT',len(val),'FIRST',str(val[:1])[:500])
-                      except Exception as e: print('JSON_ERROR',str(e))
+                      except Exception as e:
+                          print('JSON_ERROR',str(e))
           PY
