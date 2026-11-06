@@ -232,6 +232,116 @@ function isHttpsUrl(value) {
   }
 }
 
+
+/*
+ * Integração de metadados ReelShort baseada no contrato público do projeto:
+ * https://github.com/wanglinsaputra/Rest-Api-ReelShort (MIT).
+ * Somente pesquisa e metadados de episódios; não expõe extração de URLs de vídeo.
+ */
+const reelShortLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false });
+let reelShortBuildId = null;
+let reelShortBuildIdFetchedAt = 0;
+
+const reelShortHeaders = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'application/json, text/plain, */*',
+  'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+  'Referer': 'https://www.reelshort.com/',
+  'Origin': 'https://www.reelshort.com'
+};
+
+async function getReelShortBuildId(force = false) {
+  if (!force && reelShortBuildId && Date.now() - reelShortBuildIdFetchedAt < 30 * 60 * 1000) {
+    return reelShortBuildId;
+  }
+  const response = await fetch('https://www.reelshort.com/id', {
+    headers: reelShortHeaders,
+    signal: AbortSignal.timeout(12000)
+  });
+  if (!response.ok) throw new Error('Não foi possível consultar o catálogo do ReelShort.');
+  const html = await response.text();
+  const match = html.match(/"buildId":"([^"]+)"/) || html.match(/\/id\/_next\/data\/([^/]+)\//);
+  if (!match) throw new Error('O ReelShort alterou a página de catálogo; tente novamente mais tarde.');
+  reelShortBuildId = match[1];
+  reelShortBuildIdFetchedAt = Date.now();
+  return reelShortBuildId;
+}
+
+async function reelShortJson(path, retry = true) {
+  const buildId = await getReelShortBuildId();
+  const url = 'https://www.reelshort.com/_next/data/' + encodeURIComponent(buildId) + '/id' + path;
+  const response = await fetch(url, {
+    headers: reelShortHeaders,
+    signal: AbortSignal.timeout(15000)
+  });
+  const body = await response.text();
+  if (response.status === 404 && retry) {
+    await getReelShortBuildId(true);
+    return reelShortJson(path, false);
+  }
+  if (!response.ok) throw new Error('O ReelShort respondeu HTTP ' + response.status + '.');
+  try {
+    return JSON.parse(body);
+  } catch (_) {
+    if (retry) {
+      await getReelShortBuildId(true);
+      return reelShortJson(path, false);
+    }
+    throw new Error('Resposta inesperada do catálogo ReelShort.');
+  }
+}
+
+app.get('/reelshort/search', reelShortLimiter, async (req, res) => {
+  const keywords = String(req.query.keywords || '').trim().slice(0, 120);
+  if (!keywords) return res.status(400).json({ error: 'Informe o nome da novelinha.' });
+  try {
+    const query = new URLSearchParams({ keywords }).toString();
+    const data = await reelShortJson('/search.json?' + query);
+    const books = data && data.pageProps && Array.isArray(data.pageProps.books) ? data.pageProps.books : [];
+    const results = books.map(book => ({
+      book_id: String(book._id || book.book_id || ''),
+      book_title: String(book.book_title || ''),
+      filtered_title: String(book.filtered_title || String(book.book_title || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, '-')),
+      book_pic: String(book.book_pic || ''),
+      special_desc: String(book.special_desc || ''),
+      chapter_count: Number(book.chapter_count || 0)
+    })).filter(book => book.book_id && book.book_title);
+    return res.json({ results });
+  } catch (error) {
+    console.error('Erro na pesquisa ReelShort:', error.message);
+    return res.status(502).json({ error: error.message || 'Não foi possível pesquisar no ReelShort.' });
+  }
+});
+
+app.get('/reelshort/episodes/:bookId', reelShortLimiter, async (req, res) => {
+  const bookId = String(req.params.bookId || '');
+  const filteredTitle = String(req.query.filtered_title || '').trim();
+  if (!/^[A-Za-z0-9_-]{4,100}$/.test(bookId) || !/^[A-Za-z0-9-]{1,180}$/.test(filteredTitle)) {
+    return res.status(400).json({ error: 'Identificador ou título de origem inválido.' });
+  }
+  try {
+    const slug = filteredTitle + '-' + bookId;
+    const data = await reelShortJson('/movie/' + encodeURIComponent(slug) + '.json?' + new URLSearchParams({ slug }));
+    const details = data && data.pageProps && data.pageProps.data ? data.pageProps.data : {};
+    const sourceEpisodes = Array.isArray(details.online_base) ? details.online_base : [];
+    const episodes = sourceEpisodes.map(item => ({
+      episode: Number(item.serial_number || 0),
+      chapter_id: String(item.chapter_id || '')
+    })).filter(item => Number.isSafeInteger(item.episode) && item.episode > 0 && item.chapter_id);
+    return res.json({
+      book: {
+        book_title: String(details.book_title || ''),
+        special_desc: String(details.special_desc || ''),
+        book_pic: String(details.book_pic || '')
+      },
+      episodes
+    });
+  } catch (error) {
+    console.error('Erro ao consultar episódios ReelShort:', error.message);
+    return res.status(502).json({ error: error.message || 'Não foi possível obter os episódios.' });
+  }
+});
+
 // Catálogo público: somente séries e episódios publicados pelo administrador.
 app.get('/catalog', async (_req, res) => {
   try {
