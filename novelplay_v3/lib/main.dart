@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'rewarded_ads.dart';
 import 'package:video_player/video_player.dart';
 import 'catalog.dart';
 import 'dramabos_screen.dart';
@@ -6,7 +8,11 @@ import 'dramabos_ui.dart';
 import 'drive_screen.dart';
 import 'auth.dart';
 
-void main() => runApp(const NovelPlay());
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  unawaited(NovelRewardedAds.initialize());
+  runApp(const NovelPlay());
+}
 
 class NovelPlay extends StatelessWidget {
   const NovelPlay({super.key});
