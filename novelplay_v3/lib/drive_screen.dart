@@ -92,6 +92,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
   String _searchQuery = '';
   final Set<String> _favoriteIds = <String>{};
   int _tabIndex = 0;
+  int _bottomIndex = 0;
   late Future<List<dynamic>> _content = _loadSeries();
   late Future<List<WatchHistoryEntry>> _historyFuture = _loadHistory();
 
@@ -270,16 +271,20 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
         ),
         bottomNavigationBar: _selectedFolderId == null
             ? BottomNavigationBar(
-                currentIndex: _tabIndex,
-                onTap: (index) => setState(() => _tabIndex = index),
-                backgroundColor: const Color(0xff15131c),
-                selectedItemColor: const Color(0xffff6b9d),
-                unselectedItemColor: const Color(0xff8d8797),
+                currentIndex: _bottomIndex,
+                onTap: (index) => setState(() => _bottomIndex = index),
+                backgroundColor: const Color(0xff080808),
+                selectedItemColor: Colors.white,
+                unselectedItemColor: const Color(0xff858585),
                 type: BottomNavigationBarType.fixed,
+                selectedFontSize: 10,
+                unselectedFontSize: 10,
                 items: const [
-                  BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Início'),
-                  BottomNavigationBarItem(icon: Icon(Icons.explore_rounded), label: 'Explorar'),
-                  BottomNavigationBarItem(icon: Icon(Icons.bookmark_rounded), label: 'Minha lista'),
+                  BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Página inicial'),
+                  BottomNavigationBarItem(icon: Icon(Icons.smart_display_outlined), label: 'Para você'),
+                  BottomNavigationBarItem(icon: Icon(Icons.bookmark_border_rounded), label: 'Minha lista'),
+                  BottomNavigationBarItem(icon: Icon(Icons.card_giftcard_rounded), label: 'Recompensas'),
+                  BottomNavigationBarItem(icon: Icon(Icons.person_outline_rounded), label: 'Perfil'),
                 ],
               )
             : null,
@@ -301,7 +306,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
               final allSeries = items.cast<DriveSeries>();
               final series = allSeries.where((item) {
                 final matchesSearch = item.name.toLowerCase().contains(_searchQuery.toLowerCase());
-                final matchesTab = _tabIndex != 2 || _favoriteIds.contains(item.id);
+                final matchesTab = _bottomIndex != 2 || _favoriteIds.contains(item.id);
                 return matchesSearch && matchesTab;
               }).toList();
               if (allSeries.isEmpty) {
@@ -312,334 +317,133 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                 );
               }
               return RefreshIndicator(
-                color: const Color(0xffff5b9a),
+                color: const Color(0xffe51b3e),
                 onRefresh: _refresh,
                 child: ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
                   children: [
-                    TextField(
-                      onChanged: (value) => setState(() => _searchQuery = value),
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
-                      decoration: InputDecoration(
-                        hintText: 'Buscar novelinhas...',
-                        hintStyle: const TextStyle(color: Color(0xffaaa4b4), fontSize: 13),
-                        prefixIcon: const Icon(Icons.search_rounded, color: Color(0xffff78aa)),
-                        suffixIcon: IconButton(
-                          tooltip: 'Atualizar catálogo',
-                          onPressed: _refresh,
-                          icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
-                        ),
-                        filled: true,
-                        fillColor: const Color(0xff29252d),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 16),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(15),
-                          borderSide: const BorderSide(color: Color(0xff494047)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(15),
-                          borderSide: const BorderSide(color: Color(0xffff6b9d), width: 1.2),
-                        ),
+                    Row(children: [
+                      Container(width: 38, height: 38, decoration: BoxDecoration(color: const Color(0xffe51b3e), borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 28)),
+                      const SizedBox(width: 9),
+                      const Expanded(child: Text('NOVELPLAY', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, letterSpacing: 1.5))),
+                      InkWell(
+                        onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Área VIP em breve.'))),
+                        borderRadius: BorderRadius.circular(9),
+                        child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xff875222), Color(0xffd6a64b)]), borderRadius: BorderRadius.circular(9)), child: const Row(children: [Icon(Icons.workspace_premium, size: 18), SizedBox(width: 5), Text('VIP', style: TextStyle(fontWeight: FontWeight.w900))])),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 38,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        children: [
-                          _homeCategory('POPULAR', 0),
-                          _homeCategory('NOVO', 1),
-                          _homeCategory('MINHA LISTA', 2),
-                        ],
-                      ),
-                    ),
-                    if (_tabIndex != 2) const SizedBox(height: 14),
-                    if (_tabIndex != 2)
+                    ]),
+                    const SizedBox(height: 14),
+                    Row(children: [
+                      Expanded(child: TextField(
+                        onChanged: (value) => setState(() => _searchQuery = value),
+                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                        decoration: InputDecoration(
+                          hintText: 'Buscar novelinhas...',
+                          hintStyle: const TextStyle(color: Color(0xff999999), fontSize: 13),
+                          prefixIcon: const Icon(Icons.search, color: Colors.white70),
+                          filled: true, fillColor: const Color(0xff292929),
+                          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xff444444))),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xffe51b3e))),
+                        ),
+                      )),
+                      IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh, color: Colors.white70)),
+                    ]),
+                    const SizedBox(height: 15),
+                    SizedBox(height: 40, child: ListView(scrollDirection: Axis.horizontal, children: [
+                      _homeCategory('POPULAR', 0),
+                      _homeCategory('NOVO', 1),
+                      _homeCategory('CLASSIFICAÇÃO', 2),
+                      _homeCategory('CATEGORIAS', 3),
+                    ])),
+                    if (_bottomIndex != 2) ...[
+                      const SizedBox(height: 8),
                       GestureDetector(
                         onTap: series.isEmpty ? null : () => _openSeries(series.first),
                         child: Container(
-                          height: 390,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(20),
-                            color: const Color(0xff30202b),
-                          ),
-                          clipBehavior: Clip.antiAlias,
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              if (series.isNotEmpty && series.first.coverId != null)
-                                Image.network(
-                                  'https://drive.google.com/uc?export=view&id=${series.first.coverId}',
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xff512b59)),
-                                )
-                              else
-                                const DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: [Color(0xffa33d63), Color(0xff211c32)],
-                                    ),
-                                  ),
-                                  child: Icon(Icons.movie_filter_rounded, size: 150, color: Color(0x33ffffff)),
-                                ),
-                              const DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [Color(0x00000000), Color(0x22000000), Color(0xee050505)],
-                                    stops: [0.28, 0.55, 1],
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                left: 18,
-                                right: 18,
-                                bottom: 22,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xffd52b58),
-                                        borderRadius: BorderRadius.circular(5),
-                                      ),
-                                      child: const Text('DESTAQUE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      series.isEmpty ? 'Novelinhas para assistir' : series.first.name,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(fontSize: 27, height: 1.05, fontWeight: FontWeight.w900),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    const Text('Romance • Drama • Histórias curtas',
-                                      style: TextStyle(color: Colors.white70, fontSize: 12)),
-                                    const SizedBox(height: 17),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 13),
-                                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(7)),
-                                      child: const Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.play_arrow_rounded, color: Colors.black, size: 22),
-                                          SizedBox(width: 7),
-                                          Text('REPRODUZIR', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, letterSpacing: 0.4)),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
+                          height: 410, clipBehavior: Clip.antiAlias,
+                          decoration: BoxDecoration(color: const Color(0xff242424), borderRadius: BorderRadius.circular(5)),
+                          child: Stack(fit: StackFit.expand, children: [
+                            if (series.isNotEmpty && series.first.coverId != null)
+                              Image.network('https://drive.google.com/uc?export=view&id=${series.first.coverId}', fit: BoxFit.cover, errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xff421923)))
+                            else
+                              const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(colors: [Color(0xff751b2a), Color(0xff151515)], begin: Alignment.topLeft, end: Alignment.bottomRight)), child: Icon(Icons.movie_creation_outlined, size: 130, color: Color(0x44ffffff))),
+                            const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0x00000000), Color(0x33000000), Color(0xf0000000)], stops: [0.30, 0.57, 1]))),
+                            Positioned(left: 17, right: 17, bottom: 20, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: const Color(0xffe51b3e), borderRadius: BorderRadius.circular(4)), child: const Text('NOVELPLAY EXCLUSIVO', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900))),
+                              const SizedBox(height: 9),
+                              Text(series.isEmpty ? 'Descubra sua próxima história' : series.first.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 27, height: 1.05, fontWeight: FontWeight.w900)),
+                              const SizedBox(height: 7),
+                              const Text('Romance  •  Drama  •  Histórias emocionantes', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                              const SizedBox(height: 15),
+                              Container(padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 12), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(5)), child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.play_arrow_rounded, color: Colors.black, size: 21), SizedBox(width: 6), Text('REPRODUZIR', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 14))])),
+                            ])),
+                          ]),
                         ),
                       ),
-                    const SizedBox(height: 24),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(_tabIndex == 2 ? 'SUA COLEÇÃO' : _tabIndex == 1 ? 'DESCUBRA MAIS' : 'EM DESTAQUE', style: const TextStyle(color: Color(0xffff83b0), fontSize: 9, letterSpacing: 2, fontWeight: FontWeight.w900)),
-                          const SizedBox(height: 4),
-                          Text(_tabIndex == 2 ? 'Minha lista' : _tabIndex == 1 ? 'Explore dramas' : 'Novelinhas para assistir', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -0.4)),
-                        ])),
-                        Text('${series.length} títulos', style: const TextStyle(color: Color(0xff918b9b), fontSize: 11)),
-                      ],
-                    ),
-                    const SizedBox(height: 15),
+                      const SizedBox(height: 12),
+                      const Center(child: Text('●  ━  ●  ●  ●  ●', style: TextStyle(color: Colors.white70, fontSize: 10, letterSpacing: 3))),
+                    ],
+                    const SizedBox(height: 22),
+                    Row(children: [
+                      Expanded(child: Text(_bottomIndex == 2 ? 'MINHA LISTA' : _tabIndex == 1 ? 'NOVOS DRAMAS' : _tabIndex == 2 ? 'CLASSIFICAÇÃO' : 'NOVELINHAS PARA ASSISTIR', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900))),
+                      Text('${series.length} títulos', style: const TextStyle(color: Color(0xff999999), fontSize: 11)),
+                    ]),
+                    const SizedBox(height: 13),
                     if (series.isEmpty)
-                      Padding(padding: const EdgeInsets.all(24), child: Text(_tabIndex == 2 ? 'Sua lista está vazia. Toque no coração de uma série para salvá-la aqui.' : 'Nenhuma novelinha encontrada.', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60)))
+                      const Padding(padding: EdgeInsets.all(24), child: Text('Nenhuma novelinha encontrada. Sua lista aparece aqui quando você salvar uma série.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)))
                     else
                       GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
+                        shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
                         itemCount: series.length,
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2, crossAxisSpacing: 13, mainAxisSpacing: 15, childAspectRatio: 0.69,
-                        ),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 9, mainAxisSpacing: 13, childAspectRatio: 0.62),
                         itemBuilder: (context, index) {
                           final item = series[index];
-                          const palettes = [
-                            [Color(0xffa84d79), Color(0xff382039)],
-                            [Color(0xff426b8d), Color(0xff1b293e)],
-                            [Color(0xffa16a42), Color(0xff392338)],
-                            [Color(0xff477b70), Color(0xff1b3038)],
-                            [Color(0xff8056a0), Color(0xff30213e)],
-                            [Color(0xff9b5360), Color(0xff34202d)],
-                          ];
-                          final colors = palettes[index % palettes.length];
-                          final isFavorite = _favoriteIds.contains(item.id);
+                          final favorite = _favoriteIds.contains(item.id);
                           return Material(
-                            color: const Color(0xff211e2a),
-                            borderRadius: BorderRadius.circular(19),
-                            clipBehavior: Clip.antiAlias,
-                            child: InkWell(
-                              onTap: () => _openSeries(item),
-                              child: Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  if (item.coverId != null)
-                                    Positioned.fill(
-                                      child: Image.network(
-                                        'https://drive.google.com/uc?export=view&id=${item.coverId}',
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (_, __, ___) => DecoratedBox(
-                                          decoration: BoxDecoration(
-                                            gradient: LinearGradient(
-                                              begin: Alignment.topCenter,
-                                              end: Alignment.bottomCenter,
-                                              colors: [colors[0], colors[1], const Color(0xff17141e)],
-                                            ),
-                                          ),
-                                          child: const Icon(Icons.movie_filter_rounded, size: 104, color: Color(0x33ffffff)),
-                                        ),
-                                      ),
-                                    )
-                                  else
-                                    Positioned.fill(
-                                      child: DecoratedBox(
-                                        decoration: BoxDecoration(
-                                          gradient: LinearGradient(
-                                            begin: Alignment.topCenter,
-                                            end: Alignment.bottomCenter,
-                                            colors: [colors[0], colors[1], const Color(0xff17141e)],
-                                          ),
-                                        ),
-                                        child: const Icon(Icons.movie_filter_rounded, size: 104, color: Color(0x33ffffff)),
-                                      ),
-                                    ),
-                                  const Positioned.fill(
-                                    child: DecoratedBox(
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          begin: Alignment.topCenter,
-                                          end: Alignment.bottomCenter,
-                                          colors: [Color(0x00000000), Color(0x22000000), Color(0xee09070d)],
-                                          stops: [0.25, 0.55, 1],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  Positioned(top: 12, left: 12, child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                                    decoration: BoxDecoration(color: const Color(0x44000000), borderRadius: BorderRadius.circular(20)),
-                                    child: const Text('SÉRIE', style: TextStyle(fontSize: 8, letterSpacing: 1.2, fontWeight: FontWeight.w900)),
-                                  )),
-                                  Positioned(top: 5, right: 5, child: IconButton(
-                                    visualDensity: VisualDensity.compact,
-                                    onPressed: () => setState(() { if (! _favoriteIds.add(item.id)) _favoriteIds.remove(item.id); }),
-                                    icon: Icon(isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: isFavorite ? const Color(0xffff79aa) : Colors.white, size: 20),
-                                  )),
-                                  Positioned(left: 13, right: 13, bottom: 14, child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Container(width: 32, height: 32, decoration: BoxDecoration(color: const Color(0xffff6b9d), borderRadius: BorderRadius.circular(11)), child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 23)),
-                                      const SizedBox(height: 11),
-                                      Text(item.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15, height: 1.12, fontWeight: FontWeight.w900)),
-                                      const SizedBox(height: 5),
-                                      const Text('ASSISTIR AGORA  ›', style: TextStyle(fontSize: 8, letterSpacing: 1.1, color: Color(0xfff5c9dc), fontWeight: FontWeight.w800)),
-                                    ],
-                                  )),
-                                ],
-                              ),
-                            ),
+                            color: const Color(0xff242424), borderRadius: BorderRadius.circular(5), clipBehavior: Clip.antiAlias,
+                            child: InkWell(onTap: () => _openSeries(item), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Expanded(child: Stack(fit: StackFit.expand, children: [
+                                if (item.coverId != null)
+                                  Image.network('https://drive.google.com/uc?export=view&id=${item.coverId}', fit: BoxFit.cover, errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xff38202a), child: Icon(Icons.movie_outlined, size: 55, color: Colors.white38)))
+                                else
+                                  const ColoredBox(color: Color(0xff38202a), child: Icon(Icons.movie_outlined, size: 55, color: Colors.white38)),
+                                Positioned(left: 6, top: 6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4), decoration: BoxDecoration(color: const Color(0xff7134e8), borderRadius: BorderRadius.circular(4)), child: const Text('NOVEL', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900)))),
+                                Positioned(right: 2, top: 1, child: IconButton(visualDensity: VisualDensity.compact, onPressed: () => setState(() { if (!_favoriteIds.add(item.id)) _favoriteIds.remove(item.id); }), icon: Icon(favorite ? Icons.favorite : Icons.favorite_border, color: favorite ? const Color(0xffff3155) : Colors.white, size: 19))),
+                              ])),
+                              Padding(padding: const EdgeInsets.fromLTRB(9, 8, 9, 9), child: Text(item.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, height: 1.15, fontWeight: FontWeight.w700))),
+                            ])),
                           );
                         },
                       ),
-                    const SizedBox(height: 24),
-                    if (_tabIndex == 0)
+                    if (_bottomIndex == 0)
                       FutureBuilder<List<WatchHistoryEntry>>(
                         future: _historyFuture,
                         builder: (context, snapshot) {
                           final history = snapshot.data ?? [];
-                          // Mantém a seção visível mesmo quando ainda não há progresso salvo.
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 22),
-                              const Text('CONTINUE ASSISTINDO',
-                                style: TextStyle(color: Color(0xffff83b0), fontSize: 10, letterSpacing: 1.8, fontWeight: FontWeight.w900)),
-                              const SizedBox(height: 12),
-                              SizedBox(
-                                height: 116,
-                                child: history.isEmpty
-                                    ? Container(
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xff211e2a),
-                                          borderRadius: BorderRadius.circular(16),
-                                          border: Border.all(color: Colors.white10),
-                                        ),
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                        child: const Row(children: [
-                                          Icon(Icons.play_circle_outline_rounded, color: Color(0xffff83b0), size: 34),
-                                          SizedBox(width: 12),
-                                          Expanded(child: Text(
-                                            'Assista a uma série e seu progresso aparecerá aqui.',
-                                            style: TextStyle(color: Colors.white70, fontSize: 12),
-                                          )),
-                                        ]),
-                                      )
-                                    : ListView.separated(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: history.length,
-                                  separatorBuilder: (_, __) => const SizedBox(width: 11),
-                                  itemBuilder: (context, index) {
-                                    final entry = history[index];
-                                    return SizedBox(
-                                      width: 258,
-                                      child: Material(
-                                        color: const Color(0xff211e2a),
-                                        borderRadius: BorderRadius.circular(16),
-                                        clipBehavior: Clip.antiAlias,
-                                        child: InkWell(
-                                          onTap: () => _resumeHistory(entry),
-                                          child: Padding(
-                                            padding: const EdgeInsets.all(12),
-                                            child: Row(children: [
-                                              Container(
-                                                width: 58, height: 82,
-                                                decoration: BoxDecoration(
-                                                  borderRadius: BorderRadius.circular(10),
-                                                  gradient: const LinearGradient(colors: [Color(0xffa84d79), Color(0xff382039)]),
-                                                ),
-                                                child: const Icon(Icons.play_circle_fill_rounded, color: Colors.white, size: 30),
-                                              ),
-                                              const SizedBox(width: 11),
-                                              Expanded(child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                mainAxisAlignment: MainAxisAlignment.center,
-                                                children: [
-                                                  Text(entry.seriesName, maxLines: 1, overflow: TextOverflow.ellipsis,
-                                                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
-                                                  const SizedBox(height: 5),
-                                                  Text(entry.episodeName, maxLines: 1, overflow: TextOverflow.ellipsis,
-                                                    style: const TextStyle(color: Colors.white70, fontSize: 11)),
-                                                  const SizedBox(height: 9),
-                                                  ClipRRect(borderRadius: BorderRadius.circular(8),
-                                                    child: LinearProgressIndicator(value: entry.progress, minHeight: 4,
-                                                      backgroundColor: Colors.white12,
-                                                      valueColor: const AlwaysStoppedAnimation(Color(0xffff6b9d)))),
-                                                  const SizedBox(height: 5),
-                                                  const Text('TOQUE PARA CONTINUAR',
-                                                    style: TextStyle(color: Color(0xffff91b8), fontSize: 8, letterSpacing: 0.8, fontWeight: FontWeight.w900)),
-                                                ],
-                                              )),
-                                            ]),
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ],
-                          );
+                          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            const SizedBox(height: 22),
+                            const Text('CONTINUE ASSISTINDO', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+                            const SizedBox(height: 12),
+                            SizedBox(height: 112, child: history.isEmpty
+                              ? Container(decoration: BoxDecoration(color: const Color(0xff242424), borderRadius: BorderRadius.circular(7)), padding: const EdgeInsets.all(13), child: const Row(children: [Icon(Icons.play_circle_outline, color: Color(0xffe51b3e), size: 32), SizedBox(width: 10), Expanded(child: Text('Assista a uma novelinha e seu progresso aparecerá aqui.', style: TextStyle(color: Colors.white70, fontSize: 12)))]))
+                              : ListView.separated(scrollDirection: Axis.horizontal, itemCount: history.length, separatorBuilder: (_, __) => const SizedBox(width: 9), itemBuilder: (context, index) {
+                                  final entry = history[index];
+                                  return SizedBox(width: 245, child: Material(color: const Color(0xff242424), borderRadius: BorderRadius.circular(7), child: InkWell(onTap: () => _resumeHistory(entry), child: Padding(padding: const EdgeInsets.all(10), child: Row(children: [
+                                    Container(width: 55, height: 78, decoration: BoxDecoration(color: const Color(0xff4a202b), borderRadius: BorderRadius.circular(5)), child: const Icon(Icons.play_circle_fill, color: Colors.white, size: 28)),
+                                    const SizedBox(width: 10),
+                                    Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                      Text(entry.seriesName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+                                      const SizedBox(height: 5),
+                                      Text(entry.episodeName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 10)),
+                                      const SizedBox(height: 8),
+                                      ClipRRect(borderRadius: BorderRadius.circular(5), child: LinearProgressIndicator(value: entry.progress, minHeight: 4, backgroundColor: Colors.white12, valueColor: const AlwaysStoppedAnimation(Color(0xffe51b3e)))),
+                                      const SizedBox(height: 5),
+                                      const Text('CONTINUAR', style: TextStyle(color: Color(0xffff7389), fontSize: 8, fontWeight: FontWeight.w900)),
+                                    ])),
+                                  ])))));
+                                })),
+                          ]);
                         },
                       ),
                   ],
