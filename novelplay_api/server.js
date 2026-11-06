@@ -371,7 +371,7 @@ async function getReelShortBookDetails(slug) {
         errors.push(route + ': HTTP ' + response.status);
         continue;
       }
-      const match = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\\s\\S]*?)<\\/script>/i);
+      const match = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
       if (!match) {
         errors.push(route + ': __NEXT_DATA__ não encontrado');
         continue;
