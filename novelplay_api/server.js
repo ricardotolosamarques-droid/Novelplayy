@@ -42,6 +42,16 @@ async function initializeDatabase() {
     )
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS series_unlocks (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+      series_id VARCHAR(255) NOT NULL,
+      unlocked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, series_id)
+    )
+  `);
+
   const adminUsername = (process.env.ADMIN_USERNAME || 'Admin').trim();
   const adminEmail = (process.env.ADMIN_EMAIL || 'admin@novelplay.local').trim().toLowerCase();
   const adminHash = await bcrypt.hash(process.env.ADMIN_PASSWORD, 12);
@@ -147,6 +157,39 @@ app.get('/auth/me', authRequired, async (req, res) => {
   } catch (error) {
     console.error('Erro ao consultar conta:', error.message);
     return res.status(500).json({ error: 'Não foi possível consultar a conta.' });
+  }
+});
+
+app.get('/unlocks', authRequired, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT series_id FROM series_unlocks WHERE user_id = $1 ORDER BY unlocked_at DESC',
+      [req.auth.sub]
+    );
+    return res.json({ seriesIds: result.rows.map(row => row.series_id) });
+  } catch (error) {
+    console.error('Erro ao consultar novelinhas desbloqueadas:', error.message);
+    return res.status(500).json({ error: 'Não foi possível consultar seus desbloqueios.' });
+  }
+});
+
+app.post('/unlocks', authRequired, async (req, res) => {
+  const seriesId = String(req.body.seriesId || '').trim();
+  if (!seriesId || seriesId.length > 255) {
+    return res.status(400).json({ error: 'Identificador da novelinha inválido.' });
+  }
+  try {
+    const result = await pool.query(
+      `INSERT INTO series_unlocks (user_id, series_id)
+       VALUES ($1, $2)
+       ON CONFLICT (user_id, series_id) DO NOTHING
+       RETURNING series_id`,
+      [req.auth.sub, seriesId]
+    );
+    return res.status(200).json({ unlocked: true, alreadyUnlocked: result.rowCount === 0, seriesId });
+  } catch (error) {
+    console.error('Erro ao salvar desbloqueio:', error.message);
+    return res.status(500).json({ error: 'Não foi possível salvar o desbloqueio.' });
   }
 });
 
