@@ -101,7 +101,7 @@ class _AuthGateState extends State<AuthGate> {
           ),
         ],
       ),
-      body: const DriveNovelScreen(),
+      body: DriveNovelScreen(isAdmin: user!.isAdmin),
     );
   }
 }
