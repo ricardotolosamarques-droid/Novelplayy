@@ -7,7 +7,6 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'rewarded_ads.dart';
 import 'series_unlocks.dart';
 
 const _folderId = '1O28a3-3bmKkVj_3dS9HlWX0Owyn3eFts';
@@ -244,30 +243,8 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
           ..addAll(savedUnlocks);
       }
       if (!_unlockedSeriesIds.contains(series.id)) {
-        final accepted = await showDialog<bool>(
-          context: context,
-          builder: (dialogContext) => AlertDialog(
-            backgroundColor: const Color(0xff242424),
-            title: const Text('Desbloquear novelinha'),
-            content: Text('Assista a um anúncio para liberar todos os episódios de "${series.name}" permanentemente na sua conta.'),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Agora não')),
-              FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: const Color(0xffe51b3e)),
-                onPressed: () => Navigator.pop(dialogContext, true),
-                child: const Text('Assistir anúncio'),
-              ),
-            ],
-          ),
-        );
-        if (accepted != true || !mounted) return;
-        final rewarded = await NovelRewardedAds.showForSeriesUnlock();
-        if (!rewarded) {
-          if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('O anúncio ainda não está disponível. Tente novamente em instantes.')),
-          );
-          return;
-        }
+        // Anúncios temporariamente desativados para evitar o crash nativo.
+        // Mantém a navegação utilizável até a integração de anúncios ser corrigida.
         await NovelSeriesUnlocks.unlock(series.id);
         _unlockedSeriesIds.add(series.id);
       }
