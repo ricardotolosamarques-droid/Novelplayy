@@ -243,7 +243,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
           ..clear()
           ..addAll(savedUnlocks);
       }
-      if (!_unlockedSeriesIds.contains(series.id)) {
+      if (!widget.isAdmin && !_unlockedSeriesIds.contains(series.id)) {
         final earnedReward = await NovelRewardedAds.showForSeriesUnlock();
         if (!earnedReward) {
           throw Exception('Assista ao anúncio completo para desbloquear esta novelinha. Se o anúncio não carregar, tente novamente mais tarde.');
