@@ -334,6 +334,42 @@ app.get('/reelshort/search', reelShortLimiter, async (req, res) => {
   }
 });
 
+function findReelShortBookDetails(value, depth = 0) {
+  if (!value || typeof value !== 'object' || depth > 6) return null;
+  if (!Array.isArray(value)) {
+    for (const key of ['online_base', 'onlineBase', 'chapter_list', 'chapters']) {
+      if (Array.isArray(value[key])) return { details: value, episodes: value[key] };
+    }
+    for (const child of Object.values(value)) {
+      const found = findReelShortBookDetails(child, depth + 1);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+async function getReelShortBookDetails(slug) {
+  const encodedSlug = encodeURIComponent(slug);
+  const query = new URLSearchParams({ slug }).toString();
+  const paths = [
+    '/full-episodes/' + encodedSlug + '.json?' + query,
+    '/movie/' + encodedSlug + '.json?' + query
+  ];
+  const errors = [];
+  for (const path of paths) {
+    try {
+      const payload = await reelShortJson(path);
+      const pageProps = payload && payload.pageProps ? payload.pageProps : {};
+      const found = findReelShortBookDetails(pageProps);
+      if (found && found.episodes.length) return found;
+      errors.push(path + ': resposta sem lista de episódios');
+    } catch (error) {
+      errors.push(path + ': ' + error.message);
+    }
+  }
+  throw new Error('Não foi possível localizar os episódios nas rotas públicas do ReelShort. ' + errors.join(' | '));
+}
+
 app.get('/reelshort/episodes/:bookId', reelShortLimiter, async (req, res) => {
   const bookId = String(req.params.bookId || '');
   const filteredTitle = normalizeReelShortSlug(req.query.filtered_title);
@@ -342,23 +378,27 @@ app.get('/reelshort/episodes/:bookId', reelShortLimiter, async (req, res) => {
   }
   try {
     const slug = filteredTitle + '-' + bookId;
-    const data = await reelShortJson('/movie/' + encodeURIComponent(slug) + '.json?' + new URLSearchParams({ slug }));
-    const details = data && data.pageProps && data.pageProps.data ? data.pageProps.data : {};
-    const sourceEpisodes = Array.isArray(details.online_base) ? details.online_base : [];
+    const found = await getReelShortBookDetails(slug);
+    const details = found.details;
+    const sourceEpisodes = found.episodes;
     const paidStart = Number(details.paid_start);
     const isPaid = Number(details.is_paid);
     const episodes = sourceEpisodes.map(item => {
-      const number = Number(item.serial_number || 0);
+      const number = Number(item.serial_number || item.episode || item.episode_number || 0);
+      const chapterId = String(item.chapter_id || item.chapterId || item._id || '');
       const free = isPaid === 0 && Number.isSafeInteger(paidStart) && paidStart === 0
         ? true
         : Number.isSafeInteger(paidStart) && paidStart > 0 && number < paidStart;
-      return { episode: number, chapter_id: String(item.chapter_id || ''), free };
+      return { episode: number, chapter_id: chapterId, free };
     }).filter(item => Number.isSafeInteger(item.episode) && item.episode > 0 && item.chapter_id);
+    if (!episodes.length) {
+      throw new Error('A página foi encontrada, mas não trouxe números e identificadores de episódios reconhecíveis.');
+    }
     return res.json({
       book: {
-        book_title: String(details.book_title || ''),
-        special_desc: String(details.special_desc || ''),
-        book_pic: String(details.book_pic || '')
+        book_title: String(details.book_title || details.title || ''),
+        special_desc: String(details.special_desc || details.description || ''),
+        book_pic: String(details.book_pic || details.cover || '')
       },
       episodes
     });

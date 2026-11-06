@@ -124,7 +124,7 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
       };
       final episodesUri = Uri.parse('$_catalogApi/reelshort/episodes/' + Uri.encodeComponent(bookId));
       final episodeData = await Sources.request(episodesUri.replace(queryParameters: {
-        'filtered_title': (book['filtered_title'] ?? titleSlug).toString(),
+        'filtered_title': titleSlug,
       }));
       if (episodeData is! Map || episodeData['episodes'] is! List) {
         throw Exception('Não foi possível obter a lista de episódios.');
@@ -162,7 +162,7 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
           'synopsis': (book['special_desc'] ?? '').toString(),
           'coverUrl': (book['book_pic'] ?? '').toString(),
           'sourceBookId': bookId,
-          'sourceFilteredTitle': (book['filtered_title'] ?? titleSlug).toString(),
+          'sourceFilteredTitle': titleSlug,
           'authorizedPlayback': authorizedPlayback,
           'episodes': episodes,
         }),
