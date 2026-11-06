@@ -33,7 +33,7 @@ jobs:
           app_id='ca-app-pub-3940256099942544~3347511713'
           meta=f'<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="{app_id}" />'
           if 'com.google.android.gms.ads.APPLICATION_ID' not in s:
-              s=re.sub(r'(<application\\b[^>]*>)', lambda m: m.group(1)+'\n        '+meta, s, count=1)
+              s=re.sub(r'(<application\b[^>]*>)', lambda m: m.group(1)+'\n        '+meta, s, count=1)
           p.write_text(s)
           PY
       - name: Confirmar identificador Android
