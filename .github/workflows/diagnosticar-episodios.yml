@@ -1,4 +1,4 @@
-name: Diagnosticar disponibilidade pública de episódios
+name: Diagnosticar importação ReelShort PT
 on:
   workflow_dispatch:
   push:
@@ -8,49 +8,42 @@ jobs:
   diagnostico:
     runs-on: ubuntu-latest
     steps:
-      - name: Identificar metadados de episódios
+      - name: Testar rotas públicas da novelinha
         shell: bash
         run: |
           python3 - <<'PY'
-          import json,urllib.request,re
+          import json, urllib.request, urllib.error, re
           base='https://www.reelshort.com'
-          request=urllib.request.Request(base+'/id',headers={'User-Agent':'Mozilla/5.0','Accept':'text/html'})
-          data=urllib.request.urlopen(request,timeout=20).read().decode('utf8','replace')
-          match=re.search(r'"buildId"\s*:\s*"([^"]+)"',data)
-          if not match:
-              print('No buildId found')
-              raise SystemExit(0)
-          bid=match.group(1)
-          book_id='6a7963bafe0db909320bca6e'
-          slug='dimahkotai-darah-perak-'+book_id
-          url=f'{base}/_next/data/{bid}/id/movie/{slug}.json?slug={slug}'
-          page=json.load(urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'}),timeout=20))
-          info=page.get('pageProps',{}).get('data',{})
-          eps=info.get('online_base',[])
-          print('DATA_FIELDS:',sorted(info.keys()))
-          print('EPISODES_COUNT:',len(eps))
-          print('ACCESS_POLICY_FIELDS:',{k: info.get(k) for k in ('is_paid','paid_start','is_preview','start_play','total')})
-          print('FIRST_EPISODES:',[ {k:ep.get(k) for k in ('serial_number','chapter_type','chapter_weight','status')} for ep in eps[:5]])
-          for ep in eps[:3]:
-              print('EPISODE_FIELDS:',sorted(ep.keys()))
-              small={k:v for k,v in ep.items() if re.search('free|pay|lock|vip|purchase|trial|cost|serial_number|fee|open|permission|charge',k,re.I) and isinstance(v,(str,int,bool,type(None)))}
-              print('ACCESS_HINTS:',small)
-          if eps:
-              first=eps[0]
-              episode=first.get('serial_number')
-              chapter_id=first.get('chapter_id')
-              video_slug=f'episode-{episode}-{slug}-{chapter_id}'
-              video_url=f'{base}/_next/data/{bid}/id/episodes/{video_slug}.json?play_time=1&slug={video_slug}'
+          book_id='69e9d9c5ae32abe972004769'
+          title='baba-para-o-meu-valentao-gostosao'
+          headers={'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36','Accept':'text/html,application/json,*/*','Accept-Language':'pt-BR,pt;q=0.9,en;q=0.8','Referer':base+'/pt/'}
+          def get(url):
+              req=urllib.request.Request(url,headers=headers)
               try:
-                  video=json.load(urllib.request.urlopen(urllib.request.Request(video_url,headers={'User-Agent':'Mozilla/5.0'}),timeout=20))
-                  video_data=video.get('pageProps',{}).get('data',{})
-                  hls=video_data.get('video_url','')
-                  print('FIRST_VIDEO_METADATA:',{
-                      'fields': sorted(video_data.keys()),
-                      'has_hls':bool(hls),
-                      'https':str(hls).startswith('https://'),
-                      'duration':video_data.get('duration'),
-                  })
-              except Exception as exc:
-                  print('FIRST_VIDEO_METADATA_ERROR:',type(exc).__name__,str(exc)[:150])
+                  with urllib.request.urlopen(req,timeout=25) as r: return r.status,r.read().decode('utf8','replace')
+              except urllib.error.HTTPError as e: return e.code,e.read().decode('utf8','replace')
+          m=None
+          for home in (base+'/pt',base+'/pt/'):
+              status,html=get(home); print('HOME',home,'STATUS',status,'LEN',len(html))
+              m=re.search(r'"buildId"\s*:\s*"([^"]+)"',html)
+              if m: break
+          if not m:
+              print('BUILD_ID_NOT_FOUND'); print(html[:500]); raise SystemExit(1)
+          bid=m.group(1); print('BUILD_ID',bid)
+          slugs=[title+'-'+book_id, 'babá-para-o-meu-valentão-gostosão-'+book_id]
+          for slug in slugs:
+              for route in ('/pt/movie/','/pt/full-episodes/','/movie/','/full-episodes/'):
+                  url=f'{base}/_next/data/{bid}{route}{slug}.json?slug={slug}'
+                  status,body=get(url)
+                  print('ROUTE',route,'SLUG',slug[:20],'STATUS',status,'LEN',len(body),'CONTENT',body[:180].replace('\\n',' '))
+                  if status==200:
+                      try:
+                          data=json.loads(body); props=data.get('pageProps',{})
+                          print('TOP_KEYS',list(data.keys()),'PROPS_KEYS',list(props.keys()))
+                          info=props.get('data') or props.get('fallback') or {}
+                          print('DATA_TYPE',type(info).__name__,'DATA_KEYS',list(info.keys())[:60] if isinstance(info,dict) else '')
+                          if isinstance(info,dict):
+                              for key,val in info.items():
+                                  if isinstance(val,list): print('ARRAY',key,'COUNT',len(val),'FIRST',str(val[:1])[:500])
+                      except Exception as e: print('JSON_ERROR',str(e))
           PY
