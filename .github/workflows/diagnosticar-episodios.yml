@@ -8,50 +8,30 @@ jobs:
   diagnostico:
     runs-on: ubuntu-latest
     steps:
-      - name: Testar rotas públicas da novelinha
+      - name: Inspecionar página atual ReelShort
         shell: bash
         run: |
           python3 - <<'PY'
-          import json, urllib.request, urllib.error, re
+          import urllib.request, urllib.error, re
           base='https://www.reelshort.com'
-          book_id='69e9d9c5ae32abe972004769'
-          title='baba-para-o-meu-valentao-gostosao'
-          headers={'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36','Accept':'text/html,application/json,*/*','Accept-Language':'pt-BR,pt;q=0.9,en;q=0.8','Referer':base+'/pt/'}
-          def get(url):
+          urls=[
+            base+'/pt',
+            base+'/pt/full-episodes/bab%C3%A1-para-o-meu-valent%C3%A3o-gostos%C3%A3o-69e9d9c5ae32abe972004769',
+            base+'/pt/movie/baba-para-o-meu-valentao-gostosao-69e9d9c5ae32abe972004769'
+          ]
+          headers={'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36','Accept':'text/html,application/json,*/*','Accept-Language':'pt-BR,pt;q=0.9,en;q=0.8'}
+          for url in urls:
               req=urllib.request.Request(url,headers=headers)
               try:
-                  with urllib.request.urlopen(req,timeout=25) as r: return r.status,r.read().decode('utf8','replace')
-              except urllib.error.HTTPError as e: return e.code,e.read().decode('utf8','replace')
-          m=None
-          for home in (base+'/pt',base+'/pt/'):
-              status,html=get(home)
-              print('HOME',home,'STATUS',status,'LEN',len(html))
-              m=re.search(r'"buildId"\\s*:\\s*"([^"]+)"',html)
-              if m: break
-          if not m:
-              print('BUILD_ID_NOT_FOUND'); print(html[:500]); raise SystemExit(1)
-          bid=m.group(1)
-          print('BUILD_ID',bid)
-          slugs=[title+'-'+book_id, 'babá-para-o-meu-valentão-gostosão-'+book_id]
-          def walk(v,path='$',depth=0):
-              if depth>7: return
-              if isinstance(v,dict):
-                  if v: print('OBJECT',path,'KEYS',list(v.keys())[:100])
-                  for k,x in v.items(): walk(x,path+'.'+str(k),depth+1)
-              elif isinstance(v,list):
-                  print('LIST',path,'COUNT',len(v),'SAMPLE',str(v[:2])[:1500])
-                  for j,x in enumerate(v[:2]): walk(x,path+f'[{j}]',depth+1)
-          for slug in slugs:
-              for route in ('/pt/movie/','/pt/full-episodes/','/movie/','/full-episodes/'):
-                  url=f'{base}/_next/data/{bid}{route}{slug}.json?slug={slug}'
-                  status,body=get(url)
-                  print('ROUTE',route,'SLUG',slug[:24],'STATUS',status,'LEN',len(body),'CONTENT',body[:180].replace('\\n',' '))
-                  if status==200:
-                      try:
-                          data=json.loads(body)
-                          props=data.get('pageProps',{})
-                          print('TOP_KEYS',list(data.keys()),'PROPS_KEYS',list(props.keys()))
-                          walk(props)
-                      except Exception as e:
-                          print('JSON_ERROR',str(e))
+                  with urllib.request.urlopen(req,timeout=30) as r:
+                      body=r.read().decode('utf8','replace'); status=r.status
+              except urllib.error.HTTPError as e:
+                  body=e.read().decode('utf8','replace'); status=e.code
+              print('PAGE',url,'STATUS',status,'LEN',len(body),'FINAL_URL',getattr(r,'url',url) if 'r' in locals() else url)
+              for pattern in [r'buildId',r'__NEXT_DATA__',r'/_next/static/[^" ]+',r'__next_f',r'online_base',r'chapter_list',r'chapters',r'paid_start',r'chapter_id',r'book_title',r'69e9d9c5ae32abe972004769']:
+                  matches=list(re.finditer(pattern,body,re.I))
+                  print('PATTERN',pattern,'COUNT',len(matches))
+                  for m in matches[:2]:
+                      print('CONTEXT',body[max(0,m.start()-250):m.end()+450].replace('\\n',' ')[:800])
+              print('HTML_START',body[:500])
           PY
