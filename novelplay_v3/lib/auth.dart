@@ -38,7 +38,11 @@ class NovelAuth {
     try {
       final data = await _request('/auth/me', bearer: saved);
       return NovelUser.fromJson(data['user'] as Map<String, dynamic>);
-    } catch (_) { await logout(); return null; }
+    } catch (_) {
+      // Falhas temporárias de rede/servidor não devem apagar a credencial.
+      // Uma resposta de autenticação inválida será tratada quando a API voltar.
+      return null;
+    }
   }
 
   static Future<NovelUser> login(String identity, String password) async {
