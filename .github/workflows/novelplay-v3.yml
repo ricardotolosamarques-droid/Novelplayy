@@ -29,7 +29,12 @@ jobs:
           s=p.read_text()
           if 'android.permission.INTERNET' not in s:
               s=s.replace('<application','<uses-permission android:name="android.permission.INTERNET" />\n    <application',1)
-              p.write_text(s)
+          app_id='ca-app-pub-3940256099942544~3347511713'
+          meta=f'<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="{app_id}" />'
+          if 'com.google.android.gms.ads.APPLICATION_ID' not in s:
+              s=s.replace('<application', '<application', 1)
+              s=s.replace('>', '>\n        '+meta, 1)
+          p.write_text(s)
           PY
       - name: Confirmar identificador Android
         working-directory: novelplay_v3/android
