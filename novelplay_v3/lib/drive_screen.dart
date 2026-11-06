@@ -167,19 +167,28 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
         .toList()
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
-    // Uma imagem dentro da pasta da série pode ser usada como pôster.
-    return Future.wait(folders.map((series) async {
-      try {
-        final children = await _listChildren(series.id);
-        final covers = children.where((file) =>
-            (file['mimeType'] as String? ?? '').startsWith('image/'));
-        if (covers.isEmpty) return series;
-        final cover = covers.first;
-        return DriveSeries(series.id, series.name, coverId: cover['id'] as String?);
-      } catch (_) {
-        return series;
-      }
-    }));
+    // Processa poucas séries por vez para não sobrecarregar a API do Drive.
+    final result = <DriveSeries>[];
+    for (var start = 0; start < folders.length; start += 4) {
+      final batch = folders.skip(start).take(4);
+      final loaded = await Future.wait(batch.map((series) async {
+        try {
+          final children = await _listChildren(series.id);
+          Map<String, dynamic>? cover;
+          for (final file in children) {
+            if ((file['mimeType'] as String? ?? '').startsWith('image/')) {
+              cover = file;
+              break;
+            }
+          }
+          return cover == null ? series : DriveSeries(series.id, series.name, coverId: cover['id'] as String?);
+        } catch (_) {
+          return series;
+        }
+      }));
+      result.addAll(loaded);
+    }
+    return result;
   }
 
   Future<List<DriveEpisode>> _loadEpisodes(String folderId) async {
