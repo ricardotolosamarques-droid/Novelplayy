@@ -32,7 +32,7 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
     final data = jsonDecode(utf8.decode(response.bodyBytes));
     if (data is! Map<String, dynamic>) throw Exception('Resposta inválida do servidor.');
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception(data['error']?.toString() ?? 'Erro HTTP \${response.statusCode}.');
+      throw Exception(data['error']?.toString() ?? 'Erro HTTP ${response.statusCode}.');
     }
     return data;
   }
@@ -89,7 +89,7 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
     body: FutureBuilder<List<Map<String, dynamic>>>(
       future: _request,
       builder: (context, snapshot) {
-        if (snapshot.hasError) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Não foi possível carregar o catálogo.\n\${snapshot.error}')));
+        if (snapshot.hasError) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Não foi possível carregar o catálogo.\n${snapshot.error}')));
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final series = snapshot.data!;
         if (series.isEmpty) return Center(child: Padding(padding: const EdgeInsets.all(28), child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -116,7 +116,7 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
                       ? Image.network(coverUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.movie))
                       : const Icon(Icons.movie, size: 38, color: Color(0xffff6b9d))),
                   title: Text((item['title'] ?? 'Série').toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('\${episodes.length} episódios\n\${(item['synopsis'] ?? '').toString()}', maxLines: 3, overflow: TextOverflow.ellipsis),
+                  subtitle: Text('${episodes.length} episódios\n${(item['synopsis'] ?? '').toString()}', maxLines: 3, overflow: TextOverflow.ellipsis),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => _ReelShortSeriesScreen(series: item, isAdmin: widget.isAdmin, onChanged: _refresh))),
                 ),
@@ -170,7 +170,7 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
       final token = prefs.getString('novelplay_auth_token');
       if (token == null) throw Exception('Entre novamente na sua conta.');
       final response = await http.post(
-        Uri.parse('$_catalogApi/admin/catalog/series/\${widget.series['id']}/episodes'),
+        Uri.parse('$_catalogApi/admin/catalog/series/${widget.series['id']}/episodes'),
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
         body: jsonEncode({
           'number': parsedNumber,
