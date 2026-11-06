@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
+import 'catalog.dart';
 
 const _catalogApi = 'https://novelplay-api-ee5f.onrender.com';
 
@@ -42,6 +43,108 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
     return (data['series'] as List? ?? []).whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
   }
   void _refresh() => setState(() => _request = _load());
+
+  Future<void> _importSeriesFromLink() async {
+    final link = TextEditingController();
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Importar novelinha'),
+        content: TextField(
+          controller: link,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(
+            labelText: 'Link da novelinha no ReelShort',
+            hintText: 'https://www.reelshort.com/movie/...',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Buscar episódios')),
+        ],
+      ),
+    );
+    if (accepted != true) { link.dispose(); return; }
+    try {
+      final uri = Uri.tryParse(link.text.trim());
+      if (uri == null || uri.scheme != 'https' ||
+          !(uri.host == 'reelshort.com' || uri.host == 'www.reelshort.com') ||
+          !uri.path.startsWith('/movie/')) {
+        throw Exception('Cole um link HTTPS de uma novelinha do ReelShort.');
+      }
+      var pathPart = uri.pathSegments.isNotEmpty ? uri.pathSegments.last : '';
+      if (pathPart.toLowerCase().endsWith('.html')) {
+        pathPart = pathPart.substring(0, pathPart.length - 5);
+      }
+      final separator = pathPart.lastIndexOf('-');
+      if (separator < 1 || separator == pathPart.length - 1) {
+        throw Exception('Não consegui identificar o código da novelinha nesse link.');
+      }
+      final titleSlug = pathPart.substring(0, separator);
+      final bookId = pathPart.substring(separator + 1);
+      if (bookId.length < 6 || !RegExp(r'^[A-Za-z0-9_]+$').hasMatch(bookId)) {
+        throw Exception('O link não contém um identificador de novelinha válido.');
+      }
+      final searchUri = Sources.proxyEndpoint('/search');
+      if (searchUri == null) throw Exception('Serviço de metadados não configurado.');
+      final searchData = await Sources.request(searchUri.replace(queryParameters: {
+        'keywords': titleSlug.replaceAll('-', ' '),
+      }));
+      if (searchData is! Map || searchData['results'] is! List) {
+        throw Exception('O catálogo não retornou os dados da novelinha.');
+      }
+      Map<String, dynamic>? book;
+      for (final item in searchData['results'] as List) {
+        if (item is Map && (item['book_id'] ?? '').toString() == bookId) {
+          book = Map<String, dynamic>.from(item);
+          break;
+        }
+      }
+      if (book == null) throw Exception('Novelinha não encontrada no catálogo público do ReelShort.');
+      final episodesUri = Sources.proxyEndpoint('/episodes/' + Uri.encodeComponent(bookId));
+      if (episodesUri == null) throw Exception('Serviço de metadados não configurado.');
+      final episodeData = await Sources.request(episodesUri.replace(queryParameters: {
+        'filtered_title': (book['filtered_title'] ?? titleSlug).toString(),
+      }));
+      if (episodeData is! Map || episodeData['episodes'] is! List) {
+        throw Exception('Não foi possível obter a lista de episódios.');
+      }
+      final episodes = <Map<String, dynamic>>[];
+      for (final item in episodeData['episodes'] as List) {
+        if (item is! Map) continue;
+        final number = int.tryParse((item['episode'] ?? '').toString());
+        if (number != null && number > 0) episodes.add({'number': number, 'title': 'Episódio $number'});
+      }
+      if (episodes.isEmpty) throw Exception('Nenhum episódio foi encontrado para essa novelinha.');
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('novelplay_auth_token');
+      if (token == null) throw Exception('Entre novamente na sua conta de administrador.');
+      final response = await http.post(
+        Uri.parse('$_catalogApi/admin/catalog/import'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'title': (book['book_title'] ?? 'Novelinha').toString(),
+          'synopsis': (book['special_desc'] ?? '').toString(),
+          'coverUrl': (book['book_pic'] ?? '').toString(),
+          'episodes': episodes,
+        }),
+      );
+      final result = jsonDecode(utf8.decode(response.bodyBytes));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(result is Map ? result['error']?.toString() ?? 'Falha ao importar.' : 'Falha ao importar.');
+      }
+      _refresh();
+      _message('Importação concluída: ${episodes.length} episódios cadastrados. Os vídeos ainda não foram conectados.');
+    } catch (e) {
+      _message(e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      link.dispose();
+    }
+  }
 
   Future<void> _createSeries() async {
     final title = TextEditingController(), synopsis = TextEditingController(), cover = TextEditingController();
@@ -83,7 +186,8 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: const Color(0xff101018),
     appBar: AppBar(title: const Text('ReelShort'), actions: [
-      if (widget.isAdmin) IconButton(tooltip: 'Adicionar série', onPressed: _createSeries, icon: const Icon(Icons.add_circle_outline)),
+      if (widget.isAdmin) IconButton(tooltip: 'Importar pelo link do ReelShort', onPressed: _importSeriesFromLink, icon: const Icon(Icons.download_for_offline_outlined)),
+      if (widget.isAdmin) IconButton(tooltip: 'Adicionar série manualmente', onPressed: _createSeries, icon: const Icon(Icons.add_circle_outline)),
       IconButton(tooltip: 'Atualizar', onPressed: _refresh, icon: const Icon(Icons.refresh)),
     ]),
     body: FutureBuilder<List<Map<String, dynamic>>>(
@@ -97,7 +201,7 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
           const SizedBox(height: 12),
           const Text('Nenhuma série cadastrada', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          Text(widget.isAdmin ? 'Toque no botão + para cadastrar a primeira série e adicionar os links dos episódios.' : 'Novas séries autorizadas aparecerão aqui assim que forem cadastradas.'),
+          Text(widget.isAdmin ? 'Use o botão de importação para buscar uma novelinha pelo link ou + para cadastrar manualmente.' : 'Novas séries cadastradas aparecerão aqui.')
         ])));
         return RefreshIndicator(
           onRefresh: () async { _refresh(); await _request; },
@@ -219,9 +323,9 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
             return ListTile(
               leading: CircleAvatar(backgroundColor: const Color(0xff38202a), child: Text('$number')),
               title: Text((episode['title'] ?? 'Episódio $number').toString()),
-              subtitle: const Text('Assistir no NovelPlay'),
-              trailing: const Icon(Icons.play_circle_outline, color: Color(0xffff6b9d)),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => _AuthorizedHlsPlayer(
+              subtitle: Text((episode['videoUrl'] ?? '').toString().isEmpty ? 'Metadados importados · vídeo não conectado' : 'Assistir no NovelPlay'),
+              trailing: Icon((episode['videoUrl'] ?? '').toString().isEmpty ? Icons.info_outline : Icons.play_circle_outline, color: const Color(0xffff6b9d)),
+              onTap: (episode['videoUrl'] ?? '').toString().isEmpty ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => _AuthorizedHlsPlayer(
                 title: (episode['title'] ?? 'Episódio $number').toString(),
                 url: (episode['videoUrl'] ?? '').toString(),
               ))),
