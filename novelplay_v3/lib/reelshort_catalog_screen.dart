@@ -46,22 +46,35 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
 
   Future<void> _importSeriesFromLink() async {
     final link = TextEditingController();
+    var authorizedPlayback = false;
     final accepted = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Importar novelinha'),
-        content: TextField(
-          controller: link,
-          keyboardType: TextInputType.url,
-          decoration: const InputDecoration(
-            labelText: 'Link da novelinha no ReelShort',
-            hintText: 'https://www.reelshort.com/movie/...',
-          ),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Importar novelinha'),
+          content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+              controller: link,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                labelText: 'Link da novelinha no ReelShort',
+                hintText: 'https://www.reelshort.com/movie/...',
+              ),
+            ),
+            const SizedBox(height: 12),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              value: authorizedPlayback,
+              onChanged: (value) => setDialogState(() => authorizedPlayback = value == true),
+              controlAffinity: ListTileControlAffinity.leading,
+              title: const Text('Tenho autorização para reproduzir e distribuir os vídeos desta obra.'),
+            ),
+          ])),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+            FilledButton(onPressed: authorizedPlayback ? () => Navigator.pop(dialogContext, true) : null, child: const Text('Buscar episódios')),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Buscar episódios')),
-        ],
       ),
     );
     if (accepted != true) { link.dispose(); return; }
@@ -139,6 +152,9 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
           'title': (book['book_title'] ?? 'Novelinha').toString(),
           'synopsis': (book['special_desc'] ?? '').toString(),
           'coverUrl': (book['book_pic'] ?? '').toString(),
+          'sourceBookId': bookId,
+          'sourceFilteredTitle': (book['filtered_title'] ?? titleSlug).toString(),
+          'authorizedPlayback': authorizedPlayback,
           'episodes': episodes,
         }),
       );
@@ -147,7 +163,8 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
         throw Exception(result is Map ? result['error']?.toString() ?? 'Falha ao importar.' : 'Falha ao importar.');
       }
       _refresh();
-      _message('Importação concluída: ${episodes.length} episódios cadastrados. Os vídeos ainda não foram conectados.');
+      final videoCount = result is Map ? (result['videoCount'] as num?)?.toInt() ?? 0 : 0;
+      _message('Importação concluída: ${episodes.length} episódios. $videoCount vídeos conectados automaticamente; ${episodes.length - videoCount} sem link disponível.');
     } catch (e) {
       _message(e.toString().replaceFirst('Exception: ', ''));
     } finally {
