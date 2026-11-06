@@ -349,25 +349,59 @@ function findReelShortBookDetails(value, depth = 0) {
 }
 
 async function getReelShortBookDetails(slug) {
+  // O ReelShort passou a entregar os dados SSR em __NEXT_DATA__;
+  // a antiga rota _next/data deixou de devolver a lista nesta página.
   const encodedSlug = encodeURIComponent(slug);
-  const query = new URLSearchParams({ slug }).toString();
-  const paths = [
-    '/full-episodes/' + encodedSlug + '.json?' + query,
-    '/movie/' + encodedSlug + '.json?' + query
-  ];
+  const routes = ['/pt/movie/', '/pt/full-episodes/'];
   const errors = [];
-  for (const path of paths) {
+  for (const route of routes) {
     try {
-      const payload = await reelShortJson(path);
-      const pageProps = payload && payload.pageProps ? payload.pageProps : {};
+      const url = 'https://www.reelshort.com' + route + encodedSlug;
+      const response = await fetch(url, {
+        headers: {
+          ...reelShortHeaders,
+          Accept: 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8'
+        },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(20000)
+      });
+      const html = await response.text();
+      if (!response.ok) {
+        errors.push(route + ': HTTP ' + response.status);
+        continue;
+      }
+      const match = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
+      if (!match) {
+        errors.push(route + ': __NEXT_DATA__ não encontrado');
+        continue;
+      }
+      let payload;
+      try {
+        payload = JSON.parse(match[1]);
+      } catch (_) {
+        errors.push(route + ': JSON SSR inválido');
+        continue;
+      }
+      const pageProps = payload && payload.props && payload.props.pageProps
+        ? payload.props.pageProps
+        : (payload && payload.pageProps ? payload.pageProps : {});
       const found = findReelShortBookDetails(pageProps);
-      if (found && found.episodes.length) return found;
-      errors.push(path + ': resposta sem lista de episódios');
+      if (found && found.episodes.length) {
+        const details = found.details;
+        const unique = new Map();
+        for (const item of found.episodes) {
+          const id = String(item.chapter_id || item.chapterId || item._id || '');
+          if (id) unique.set(id, item);
+        }
+        return { details, episodes: Array.from(unique.values()) };
+      }
+      errors.push(route + ': página carregou, mas sem lista de episódios');
     } catch (error) {
-      errors.push(path + ': ' + error.message);
+      errors.push(route + ': ' + error.message);
     }
   }
-  throw new Error('Não foi possível localizar os episódios nas rotas públicas do ReelShort. ' + errors.join(' | '));
+  throw new Error('Não foi possível localizar os episódios na página pública do ReelShort. ' + errors.join(' | '));
 }
 
 app.get('/reelshort/episodes/:bookId', reelShortLimiter, async (req, res) => {
