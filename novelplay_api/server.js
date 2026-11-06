@@ -236,7 +236,8 @@ function isHttpsUrl(value) {
 /*
  * Integração de metadados ReelShort baseada no contrato público do projeto:
  * https://github.com/wanglinsaputra/Rest-Api-ReelShort (MIT).
- * Somente pesquisa e metadados de episódios; não expõe extração de URLs de vídeo.
+ * Pesquisa, metadados e consulta de URLs de reprodução quando o administrador confirma
+ * que possui autorização para reproduzir e distribuir o conteúdo importado.
  */
 const reelShortLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false });
 let reelShortBuildId = null;
@@ -289,6 +290,15 @@ async function reelShortJson(path, retry = true) {
     }
     throw new Error('Resposta inesperada do catálogo ReelShort.');
   }
+}
+
+async function getReelShortVideoUrl(episodeNumber, filteredTitle, bookId, chapterId) {
+  const slug = 'episode-' + episodeNumber + '-' + filteredTitle + '-' + bookId + '-' + chapterId;
+  const query = new URLSearchParams({ play_time: '1', slug }).toString();
+  const data = await reelShortJson('/episodes/' + encodeURIComponent(slug) + '.json?' + query);
+  const episode = data && data.pageProps && data.pageProps.data ? data.pageProps.data : {};
+  const videoUrl = String(episode.video_url || '');
+  return isHttpsUrl(videoUrl) ? videoUrl : '';
 }
 
 app.get('/reelshort/search', reelShortLimiter, async (req, res) => {
@@ -406,6 +416,11 @@ app.post('/admin/catalog/import', authRequired, async (req, res) => {
   const synopsis = String(req.body.synopsis || '').trim();
   const coverUrl = String(req.body.coverUrl || '').trim();
   const episodes = Array.isArray(req.body.episodes) ? req.body.episodes : [];
+  const authorizedPlayback = req.body.authorizedPlayback === true;
+  const sourceBookId = String(req.body.sourceBookId || '').trim();
+  const sourceFilteredTitle = String(req.body.sourceFilteredTitle || '').trim();
+  if (!authorizedPlayback) return res.status(400).json({ error: 'Confirme que possui autorização para reproduzir e distribuir os vídeos importados.' });
+  if (!/^[A-Za-z0-9_-]{4,100}$/.test(sourceBookId) || !/^[A-Za-z0-9-]{1,180}$/.test(sourceFilteredTitle)) return res.status(400).json({ error: 'Dados de origem ReelShort inválidos.' });
   if (!title || title.length > 180) return res.status(400).json({ error: 'Nome da série inválido.' });
   if (synopsis.length > 4000) return res.status(400).json({ error: 'Descrição muito longa.' });
   if (coverUrl && (!isHttpsUrl(coverUrl) || coverUrl.length > 2000)) return res.status(400).json({ error: 'Capa HTTPS inválida.' });
@@ -422,9 +437,22 @@ app.post('/admin/catalog/import', authRequired, async (req, res) => {
       return res.status(400).json({ error: 'A lista contém um episódio inválido ou repetido.' });
     }
     seen.add(number);
-    normalized.push({ number, title: episodeTitle, sourceEpisodeId, sourceIsFree });
+    normalized.push({ number, title: episodeTitle, sourceEpisodeId, sourceIsFree, videoUrl: '' });
   }
   normalized.sort((a, b) => a.number - b.number);
+  // Resolve URLs em pequenos lotes para evitar sobrecarregar o serviço de origem.
+  for (let offset = 0; offset < normalized.length; offset += 4) {
+    const batch = normalized.slice(offset, offset + 4);
+    const resolved = await Promise.all(batch.map(async episode => {
+      try {
+        return await getReelShortVideoUrl(episode.number, sourceFilteredTitle, sourceBookId, episode.sourceEpisodeId);
+      } catch (error) {
+        console.warn('Não foi possível consultar o vídeo do episódio', episode.number, error.message);
+        return '';
+      }
+    }));
+    batch.forEach((episode, index) => { episode.videoUrl = resolved[index]; });
+  }
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -441,12 +469,13 @@ app.post('/admin/catalog/import', authRequired, async (req, res) => {
     for (const episode of normalized) {
       await client.query(
         `INSERT INTO catalog_episodes (series_id, episode_number, title, video_url, source_episode_id, source_is_free)
-         VALUES ($1, $2, $3, '', $4, $5)
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (series_id, episode_number) DO UPDATE
            SET title = EXCLUDED.title,
+               video_url = CASE WHEN EXCLUDED.video_url <> '' THEN EXCLUDED.video_url ELSE catalog_episodes.video_url END,
                source_episode_id = EXCLUDED.source_episode_id,
                source_is_free = EXCLUDED.source_is_free`,
-        [seriesId, episode.number, episode.title, episode.sourceEpisodeId, episode.sourceIsFree]
+        [seriesId, episode.number, episode.title, episode.videoUrl, episode.sourceEpisodeId, episode.sourceIsFree]
       );
     }
     await client.query('COMMIT');
@@ -454,7 +483,9 @@ app.post('/admin/catalog/import', authRequired, async (req, res) => {
       imported: true,
       series: { id: String(seriesId), title: seriesResult.rows[0].title },
       episodeCount: normalized.length,
-      playback: 'metadata_only'
+      playback: 'authorized_urls_requested',
+      videoCount: normalized.filter(episode => episode.videoUrl).length,
+      videosMissing: normalized.filter(episode => !episode.videoUrl).length
     });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
