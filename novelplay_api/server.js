@@ -326,7 +326,7 @@ app.get('/reelshort/search', reelShortLimiter, async (req, res) => {
 app.get('/reelshort/episodes/:bookId', reelShortLimiter, async (req, res) => {
   const bookId = String(req.params.bookId || '');
   const filteredTitle = String(req.query.filtered_title || '').trim();
-  if (!/^[A-Za-z0-9_-]{4,100}$/.test(bookId) || !/^[\\p{L}\\p{N}-]{1,180}$/u.test(filteredTitle)) {
+  if (!/^[A-Za-z0-9_-]{4,100}$/.test(bookId) || !/^[\p{L}\p{N}-]{1,180}$/u.test(filteredTitle)) {
     return res.status(400).json({ error: 'Identificador ou título de origem inválido.' });
   }
   try {
@@ -420,7 +420,7 @@ app.post('/admin/catalog/import', authRequired, async (req, res) => {
   const sourceBookId = String(req.body.sourceBookId || '').trim();
   const sourceFilteredTitle = String(req.body.sourceFilteredTitle || '').trim();
   if (!authorizedPlayback) return res.status(400).json({ error: 'Confirme que possui autorização para reproduzir e distribuir os vídeos importados.' });
-  if (!/^[A-Za-z0-9_-]{4,100}$/.test(sourceBookId) || !/^[A-Za-z0-9-]{1,180}$/.test(sourceFilteredTitle)) return res.status(400).json({ error: 'Dados de origem ReelShort inválidos.' });
+  if (!/^[A-Za-z0-9_-]{4,100}$/.test(sourceBookId) || !/^[\p{L}\p{N}-]{1,180}$/u.test(sourceFilteredTitle)) return res.status(400).json({ error: 'Dados de origem ReelShort inválidos.' });
   if (!title || title.length > 180) return res.status(400).json({ error: 'Nome da série inválido.' });
   if (synopsis.length > 4000) return res.status(400).json({ error: 'Descrição muito longa.' });
   if (coverUrl && (!isHttpsUrl(coverUrl) || coverUrl.length > 2000)) return res.status(400).json({ error: 'Capa HTTPS inválida.' });
