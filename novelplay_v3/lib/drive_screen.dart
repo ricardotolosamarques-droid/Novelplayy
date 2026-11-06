@@ -7,6 +7,8 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'rewarded_ads.dart';
+import 'series_unlocks.dart';
 
 const _folderId = '1O28a3-3bmKkVj_3dS9HlWX0Owyn3eFts';
 const _apiKey = String.fromEnvironment('DRIVE_API_KEY');
@@ -93,6 +95,8 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
   final Set<String> _favoriteIds = <String>{};
   int _tabIndex = 0;
   int _bottomIndex = 0;
+  final Set<String> _unlockedSeriesIds = <String>{};
+  bool _openingSeries = false;
   late Future<List<dynamic>> _content = _loadSeries();
   late Future<List<WatchHistoryEntry>> _historyFuture = _loadHistory();
 
@@ -219,12 +223,57 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
     );
   }
 
-  void _openSeries(DriveSeries series) {
-    setState(() {
-      _selectedFolderId = series.id;
-      _selectedSeriesName = series.name;
-      _content = _loadEpisodes(series.id);
-    });
+  Future<void> _openSeries(DriveSeries series) async {
+    if (_openingSeries) return;
+    _openingSeries = true;
+    try {
+      if (!_unlockedSeriesIds.contains(series.id)) {
+        final savedUnlocks = await NovelSeriesUnlocks.load();
+        _unlockedSeriesIds
+          ..clear()
+          ..addAll(savedUnlocks);
+      }
+      if (!_unlockedSeriesIds.contains(series.id)) {
+        final accepted = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            backgroundColor: const Color(0xff242424),
+            title: const Text('Desbloquear novelinha'),
+            content: Text('Assista a um anúncio para liberar todos os episódios de "${series.name}" permanentemente na sua conta.'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Agora não')),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: const Color(0xffe51b3e)),
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Assistir anúncio'),
+              ),
+            ],
+          ),
+        );
+        if (accepted != true || !mounted) return;
+        final rewarded = await NovelRewardedAds.showForSeriesUnlock();
+        if (!rewarded) {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('O anúncio ainda não está disponível. Tente novamente em instantes.')),
+          );
+          return;
+        }
+        await NovelSeriesUnlocks.unlock(series.id);
+        _unlockedSeriesIds.add(series.id);
+      }
+      if (!mounted) return;
+      setState(() {
+        _selectedFolderId = series.id;
+        _selectedSeriesName = series.name;
+        _content = _loadEpisodes(series.id);
+      });
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Não foi possível desbloquear: ${error.toString().replaceFirst('Exception: ', '')}')),
+      );
+    } finally {
+      _openingSeries = false;
+    }
   }
 
   void _goBackToSeries() {
