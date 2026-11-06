@@ -31,9 +31,9 @@ jobs:
           marker = '    <uses-permission android:name="android.permission.INTERNET" />'
           metadata = '        <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713" />'
           if marker not in manifest:
-              manifest = manifest.replace('<application', marker + '\\n    <application', 1)
+              manifest = manifest.replace('<application', marker + '\n    <application', 1)
           if 'com.google.android.gms.ads.APPLICATION_ID' not in manifest:
-              manifest = manifest.replace('<application', '<application\\n' + metadata, 1)
+              manifest = manifest.replace('<application', '<application\n' + metadata, 1)
           path.write_text(manifest)
           import xml.etree.ElementTree as ET
           ET.parse(path)
