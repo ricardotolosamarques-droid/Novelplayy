@@ -337,6 +337,224 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
     } finally { number.dispose(); title.dispose(); url.dispose(); }
   }
 
+
+  Future<void> _addEpisodesBatch() async {
+    final start = TextEditingController(text: '1');
+    final links = TextEditingController();
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Adicionar vários links'),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+            controller: start,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'Número inicial (para links sem número)', helperText: 'Ex.: 14 — os próximos links serão 15, 16, 17...'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: links,
+            minLines: 5,
+            maxLines: 10,
+            keyboardType: TextInputType.multiline,
+            decoration: const InputDecoration(
+              labelText: 'Cole os links, um por linha',
+              hintText: 'https://servidor/episodio14.m3u8\nhttps://servidor/episodio15.m3u8\n\nOu informe o número: 14|https://...m3u8',
+              border: OutlineInputBorder(),
+              alignLabelWithHint: true,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text('Links sem número usam a sequência a partir do número inicial. Para números específicos, use número|link.', style: TextStyle(fontSize: 12)),
+        ])),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Salvar links')),
+        ],
+      ),
+    );
+    if (accepted != true) { start.dispose(); links.dispose(); return; }
+
+    final firstNumber = int.tryParse(start.text.trim());
+    final lines = links.text.split(RegExp(r'[\r\n]+')).map((line) => line.trim()).where((line) => line.isNotEmpty).toList();
+    if (firstNumber == null || firstNumber < 1 || lines.isEmpty || lines.length > 100) {
+      _show('Informe um número inicial válido e cole de 1 a 100 links.');
+      start.dispose(); links.dispose(); return;
+    }
+
+    final parsed = <Map<String, dynamic>>[];
+    var nextNumber = firstNumber;
+    for (final line in lines) {
+      var number = nextNumber;
+      var link = line;
+      final explicit = RegExp(r'^(\d+)\s*[|;]\s*(https://\S+)
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final episodes = (widget.series['episodes'] as List? ?? []).whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList()
+      ..sort((a, b) => (a['number'] as int? ?? 0).compareTo(b['number'] as int? ?? 0));
+    return Scaffold(
+      backgroundColor: const Color(0xff101018),
+      appBar: AppBar(title: Text((widget.series['title'] ?? 'Série').toString()), actions: [
+        if (widget.isAdmin) IconButton(onPressed: _addEpisodesBatch, icon: const Icon(Icons.playlist_add), tooltip: 'Adicionar vários links'),
+        if (widget.isAdmin) IconButton(onPressed: _addEpisode, icon: const Icon(Icons.add), tooltip: 'Adicionar episódio individual'),
+      ]),
+      body: episodes.isEmpty
+        ? Center(child: Text(widget.isAdmin ? 'Adicione o primeiro episódio pelo botão +.' : 'Ainda não há episódios cadastrados.'))
+        : ListView.builder(
+          itemCount: episodes.length,
+          itemBuilder: (context, index) {
+            final episode = episodes[index];
+            final number = episode['number'] as int? ?? index + 1;
+            return ListTile(
+              leading: CircleAvatar(backgroundColor: const Color(0xff38202a), child: Text('$number')),
+              title: Text((episode['title'] ?? 'Episódio $number').toString()),
+              subtitle: Text((episode['videoUrl'] ?? '').toString().isNotEmpty
+                  ? 'Assistir no NovelPlay'
+                  : episode['sourceIsFree'] == true
+                      ? 'Episódio gratuito · vídeo não conectado'
+                      : episode['sourceIsFree'] == false
+                          ? 'Episódio pago no ReelShort · vídeo não conectado'
+                          : 'Metadados importados · vídeo não conectado'),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (widget.isAdmin)
+                  IconButton(
+                    tooltip: 'Adicionar ou alterar link',
+                    icon: const Icon(Icons.edit_link, color: Color(0xffff6b9d)),
+                    onPressed: () => _addEpisode(existing: episode),
+                  ),
+                Icon((episode['videoUrl'] ?? '').toString().isEmpty ? Icons.lock_outline : Icons.play_circle_outline, color: const Color(0xffff6b9d)),
+              ]),
+              onTap: (episode['videoUrl'] ?? '').toString().isEmpty ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => _AuthorizedHlsPlayer(
+                title: (episode['title'] ?? 'Episódio $number').toString(),
+                url: (episode['videoUrl'] ?? '').toString(),
+              ))),
+            );
+          },
+        ),
+    );
+  }
+}
+
+class _AuthorizedHlsPlayer extends StatefulWidget {
+  final String title, url;
+  const _AuthorizedHlsPlayer({required this.title, required this.url});
+  @override
+  State<_AuthorizedHlsPlayer> createState() => _AuthorizedHlsPlayerState();
+}
+
+class _AuthorizedHlsPlayerState extends State<_AuthorizedHlsPlayer> {
+  VideoPlayerController? _controller;
+  String? _error;
+  bool _loading = true;
+  @override
+  void initState() { super.initState(); _initialize(); }
+
+  Future<void> _initialize() async {
+    try {
+      final uri = Uri.parse(widget.url);
+      if (uri.scheme != 'https' || uri.host.isEmpty) throw Exception('Link HTTPS inválido.');
+      final player = VideoPlayerController.networkUrl(uri);
+      _controller = player;
+      await player.initialize();
+      await player.play();
+      if (mounted) setState(() => _loading = false);
+    } catch (e) {
+      if (mounted) setState(() {
+        _error = 'Não foi possível abrir este link. Ele pode ter expirado ou não permitir reprodução externa.\n$e';
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() { _controller?.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: Colors.black,
+    appBar: AppBar(title: Text(widget.title)),
+    body: Center(child: _loading
+      ? const CircularProgressIndicator()
+      : _error != null
+        ? Padding(padding: const EdgeInsets.all(24), child: Text(_error!, textAlign: TextAlign.center))
+        : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            AspectRatio(
+              aspectRatio: _controller!.value.aspectRatio > 0 ? _controller!.value.aspectRatio : 9 / 16,
+              child: VideoPlayer(_controller!),
+            ),
+            VideoProgressIndicator(_controller!, allowScrubbing: true, padding: const EdgeInsets.all(14)),
+            IconButton.filled(
+              onPressed: () => setState(() {
+                if (_controller!.value.isPlaying) { _controller!.pause(); } else { _controller!.play(); }
+              }),
+              icon: Icon(_controller!.value.isPlaying ? Icons.pause : Icons.play_arrow),
+            ),
+          ]),
+    ),
+  );
+}
+).firstMatch(line);
+      if (explicit != null) {
+        number = int.parse(explicit.group(1)!);
+        link = explicit.group(2)!;
+      }
+      final uri = Uri.tryParse(link);
+      if (number < 1 || uri == null || uri.scheme != 'https' || uri.host.isEmpty || link.length > 8000) {
+        _show('Linha inválida: $line\nUse um link HTTPS por linha ou número|link.');
+        start.dispose(); links.dispose(); return;
+      }
+      if (parsed.any((item) => item['number'] == number)) {
+        _show('O episódio $number aparece mais de uma vez na lista.');
+        start.dispose(); links.dispose(); return;
+      }
+      parsed.add({'number': number, 'title': 'Episódio $number', 'videoUrl': link});
+      nextNumber = number + 1;
+    }
+
+    var saved = 0;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('novelplay_auth_token');
+      if (token == null) throw Exception('Entre novamente na sua conta.');
+      for (final episode in parsed) {
+        final response = await http.post(
+          Uri.parse('$_catalogApi/admin/catalog/series/\${widget.series['id']}/episodes'),
+          headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token'},
+          body: jsonEncode(episode),
+        );
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw Exception(data is Map ? data['error'] ?? 'Falha ao salvar o episódio \${episode['number']}.' : 'Falha ao salvar o episódio \${episode['number']}.');
+        }
+        saved++;
+      }
+
+      final updated = (widget.series['episodes'] as List? ?? []).whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item)).toList();
+      for (final episode in parsed) {
+        updated.removeWhere((item) => item['number'] == episode['number']);
+        updated.add(episode);
+      }
+      widget.series['episodes'] = updated;
+      if (mounted) setState(() {});
+      widget.onChanged();
+      _show('$saved links salvos com sucesso.');
+    } catch (e) {
+      if (saved > 0) {
+        widget.onChanged();
+        _show('$saved de \${parsed.length} links foram salvos. \${e.toString().replaceFirst('Exception: ', '')}');
+      } else {
+        _show(e.toString().replaceFirst('Exception: ', ''));
+      }
+    } finally {
+      start.dispose();
+      links.dispose();
+    }
+  }
+
   void _show(String message) {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
