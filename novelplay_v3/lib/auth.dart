@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'drive_screen.dart';
+import 'reelshort_web.dart';
 
 const String _authBaseUrl = 'https://novelplay-api-ee5f.onrender.com';
 
@@ -179,7 +180,24 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: const Color(0xff101018),
-    appBar: AppBar(title: const Text('Painel administrativo')),
+    appBar: AppBar(
+      title: const Text('Painel administrativo'),
+      actions: [
+        IconButton(
+          tooltip: 'Abrir ReelShort',
+          icon: const Icon(Icons.public),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ReelShortPage(
+                url: ReelShortPage.homeUrl,
+                title: 'ReelShort',
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
     body: FutureBuilder<List<Map<String, dynamic>>>(
       future: request,
       builder: (context, snapshot) {
