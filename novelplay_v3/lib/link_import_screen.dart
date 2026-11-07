@@ -47,7 +47,14 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
         : (uri.pathSegments.isEmpty ? '' : uri.pathSegments.last);
     if (raw.isEmpty) return 'Novelinha importada';
     final name = raw
-      .replaceAll(RegExp(r'\.[a-z0-9]{2,5}
+      .replaceAll(RegExp(r'\.[a-z0-9]{2,5}$', caseSensitive: false), '')
+      .replaceAll(RegExp(r'(?:ep(?:is[oó]dio|isode)?)[ _.-]*\d+|(?:^|[ _.-])\d{1,4}(?:[ _.-]|$)', caseSensitive: false), ' ')
+      .replaceAll(RegExp(r'[_-]+'), ' ').trim();
+    final technicalName = RegExp(r'^(?:(?:h264|h265|hd|fhd|sd|narrow|wide)(?:\s+|$))+$', caseSensitive: false).hasMatch(name);
+    if (name.isEmpty || technicalName || RegExp(r'^[a-f0-9]{20,}$', caseSensitive: false).hasMatch(name.replaceAll(' ', ''))) return 'Novelinha importada';
+    return name;
+  }
+
   void _suggestTitle() {
     final links = _extractLinks();
     if (links.isNotEmpty && _title.text.trim().isEmpty) _title.text = _suggestedName(links.first);
