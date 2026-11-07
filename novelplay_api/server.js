@@ -236,8 +236,9 @@ function isHttpsUrl(value) {
 /*
  * Integração de metadados ReelShort baseada no contrato público do projeto:
  * https://github.com/wanglinsaputra/Rest-Api-ReelShort (MIT).
- * Pesquisa, metadados e consulta de URLs de reprodução quando o administrador confirma
- * que possui autorização para reproduzir e distribuir o conteúdo importado.
+ * Importa metadados de séries e episódios. URLs de reprodução são resolvidas
+ * somente para episódios identificados como gratuitos/publicamente disponíveis;
+ * episódios pagos permanecem no catálogo sem extração de mídia protegida.
  */
 const reelShortLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 60, standardHeaders: true, legacyHeaders: false });
 let reelShortBuildId = null;
@@ -506,10 +507,8 @@ app.post('/admin/catalog/import', authRequired, async (req, res) => {
   const synopsis = String(req.body.synopsis || '').trim();
   const coverUrl = String(req.body.coverUrl || '').trim();
   const episodes = Array.isArray(req.body.episodes) ? req.body.episodes : [];
-  const authorizedPlayback = req.body.authorizedPlayback === true;
   const sourceBookId = String(req.body.sourceBookId || '').trim();
   const sourceFilteredTitle = String(req.body.sourceFilteredTitle || '').trim();
-  if (!authorizedPlayback) return res.status(400).json({ error: 'Confirme que possui autorização para reproduzir e distribuir os vídeos importados.' });
   if (!/^[A-Za-z0-9_-]{4,100}$/.test(sourceBookId) || !/^[\p{L}\p{N}-]{1,180}$/u.test(sourceFilteredTitle)) return res.status(400).json({ error: 'Dados de origem ReelShort inválidos.' });
   if (!title || title.length > 180) return res.status(400).json({ error: 'Nome da série inválido.' });
   if (synopsis.length > 4000) return res.status(400).json({ error: 'Descrição muito longa.' });
@@ -575,7 +574,7 @@ app.post('/admin/catalog/import', authRequired, async (req, res) => {
       imported: true,
       series: { id: String(seriesId), title: seriesResult.rows[0].title },
       episodeCount: normalized.length,
-      playback: 'authorized_urls_requested',
+      playback: 'free_public_urls_only',
       videoCount: normalized.filter(episode => episode.videoUrl).length,
       videosMissing: normalized.filter(episode => !episode.videoUrl).length
     });
