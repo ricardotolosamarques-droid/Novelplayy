@@ -208,12 +208,10 @@ jobs:
         working-directory: novelplay_v3
         run: flutter pub get
       - name: Mostrar SHA-1 da assinatura usada no APK
-        working-directory: novelplay_v3/android
         shell: bash
         run: |
           set -euo pipefail
-          ./gradlew :app:signingReport | tee ../signing-report.txt
-          grep -Eq 'SHA1: [0-9A-F:]+' ../signing-report.txt
+          keytool -list -v -keystore "$ANDROID_USER_HOME/debug.keystore" -storepass android -alias AndroidDebugKey | grep -E 'SHA1:|SHA256:'
       - name: Compilar APK
         working-directory: novelplay_v3
         env:
