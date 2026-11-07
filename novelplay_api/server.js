@@ -588,6 +588,65 @@ app.post('/admin/catalog/import', authRequired, async (req, res) => {
   }
 });
 
+app.post('/admin/catalog/import-links', authRequired, async (req, res) => {
+  if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Acesso exclusivo do administrador.' });
+  const title = String(req.body.title || '').trim();
+  const synopsis = String(req.body.synopsis || '').trim();
+  const coverUrl = String(req.body.coverUrl || '').trim();
+  const episodes = Array.isArray(req.body.episodes) ? req.body.episodes : [];
+  if (req.body.authorizedPlayback !== true) return res.status(400).json({ error: 'Confirme que possui autorização para reproduzir e distribuir os vídeos.' });
+  if (!title || title.length > 180) return res.status(400).json({ error: 'Nome da novelinha inválido.' });
+  if (synopsis.length > 4000) return res.status(400).json({ error: 'Sinopse muito longa.' });
+  if (coverUrl && (!isHttpsUrl(coverUrl) || coverUrl.length > 2000)) return res.status(400).json({ error: 'A capa precisa ser uma URL HTTPS válida.' });
+  if (episodes.length < 1 || episodes.length > 500) return res.status(400).json({ error: 'Envie de 1 a 500 episódios por importação.' });
+  const normalized = [];
+  const seen = new Set();
+  for (const item of episodes) {
+    const number = Number(item && item.number);
+    const episodeTitle = String(item && item.title || '').trim();
+    const videoUrl = String(item && item.videoUrl || '').trim();
+    if (!Number.isSafeInteger(number) || number < 1 || number > 100000 ||
+        !episodeTitle || episodeTitle.length > 180 || !isHttpsUrl(videoUrl) ||
+        videoUrl.length > 8000 || seen.has(number)) {
+      return res.status(400).json({ error: 'A lista contém um episódio inválido, link inseguro ou número repetido.' });
+    }
+    seen.add(number);
+    normalized.push({ number, title: episodeTitle, videoUrl });
+  }
+  normalized.sort((a, b) => a.number - b.number);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const seriesResult = await client.query(
+      \`INSERT INTO catalog_series (title, synopsis, cover_url)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (title) DO UPDATE
+         SET synopsis = EXCLUDED.synopsis,
+             cover_url = CASE WHEN EXCLUDED.cover_url <> '' THEN EXCLUDED.cover_url ELSE catalog_series.cover_url END
+       RETURNING id, title\`,
+      [title, synopsis, coverUrl]
+    );
+    const seriesId = seriesResult.rows[0].id;
+    for (const episode of normalized) {
+      await client.query(
+        \`INSERT INTO catalog_episodes (series_id, episode_number, title, video_url)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (series_id, episode_number) DO UPDATE
+           SET title = EXCLUDED.title, video_url = EXCLUDED.video_url\`,
+        [seriesId, episode.number, episode.title, episode.videoUrl]
+      );
+    }
+    await client.query('COMMIT');
+    return res.status(200).json({ imported: true, series: { id: String(seriesId), title: seriesResult.rows[0].title }, episodeCount: normalized.length });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Erro ao importar links compartilhados:', error.message);
+    return res.status(500).json({ error: 'Não foi possível importar os links.' });
+  } finally {
+    client.release();
+  }
+});
+
 app.post('/admin/catalog/series/:seriesId/episodes', authRequired, async (req, res) => {
   if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Acesso exclusivo do administrador.' });
   const seriesId = Number(req.params.seriesId);
