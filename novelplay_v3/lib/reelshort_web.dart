@@ -56,7 +56,7 @@ class _ReelShortPageState extends State<ReelShortPage> {
             if (next.scheme == 'about' && next.path == 'blank') {
               return NavigationDecision.navigate;
             }
-            if (next.scheme != 'https' || !_isAllowedHost(next.host)) {
+            if (next.scheme != 'https' || !ReelShortPage._isAllowedHost(next.host)) {
               return NavigationDecision.prevent;
             }
             return NavigationDecision.navigate;
