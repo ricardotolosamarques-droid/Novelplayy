@@ -9,6 +9,7 @@ import 'package:video_player/video_player.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'rewarded_ads.dart';
 import 'reelshort_catalog_screen.dart';
+import 'published_catalog_screen.dart';
 
 const _folderId = '1O28a3-3bmKkVj_3dS9HlWX0Owyn3eFts';
 const _apiKey = String.fromEnvironment('DRIVE_API_KEY');
@@ -419,12 +420,15 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                   BottomNavigationBarItem(icon: Icon(Icons.card_giftcard_rounded), label: 'Recompensas'),
                   BottomNavigationBarItem(icon: Icon(Icons.person_outline_rounded), label: 'Perfil'),
                   BottomNavigationBarItem(icon: Icon(Icons.video_library_outlined), label: 'ReelShort'),
+                  BottomNavigationBarItem(icon: Icon(Icons.cloud_done_outlined), label: 'Catálogo'),
                 ],
               )
             : null,
-        body: _selectedFolderId == null && _bottomIndex == 5
-            ? ReelShortCatalogScreen(isAdmin: widget.isAdmin)
-            : FutureBuilder<List<dynamic>>(
+        body: _selectedFolderId == null && _bottomIndex == 6
+            ? const PublishedCatalogScreen()
+            : _selectedFolderId == null && _bottomIndex == 5
+                ? ReelShortCatalogScreen(isAdmin: widget.isAdmin)
+                : FutureBuilder<List<dynamic>>(
           future: _content,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
