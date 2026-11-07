@@ -76,7 +76,7 @@ class Catalog {
 class Sources {
   static String reelshortApiUrl =
       const String.fromEnvironment('REELSHORT_API_URL',
-          defaultValue: 'https://novelplay-api.onrender.com/api/v1/reelshort');
+          defaultValue: 'https://novelplay-api-ee5f.onrender.com/reelshort');
   static const String catalogUrl =
       String.fromEnvironment('CATALOG_URL');
   static const String apiBaseUrl =

@@ -2,7 +2,7 @@ name: Gerar NovelPlay v3 (APK)
 on:
   workflow_dispatch:
   push:
-    branches: [main, 'feature/reelshort-admin-webview']
+    branches: [main, 'feature/reelshort-admin-webview', 'feature/detector-fila-downloads-integrada', 'feature/importador-catalogo-automatico']
     paths:
       - 'novelplay_v3/**'
       - '.github/workflows/novelplay-v3.yml'
