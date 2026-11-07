@@ -21,6 +21,84 @@ jobs:
       - name: Gerar estrutura Android
         working-directory: novelplay_v3
         run: flutter create --org com.example --project-name novelinha_app --platforms android .
+      - name: Habilitar recebimento de links compartilhados
+        working-directory: novelplay_v3
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          tree = ET.parse(manifest)
+          root = tree.getroot()
+          android = "{http://schemas.android.com/apk/res/android}"
+          ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
+          activity = next((node for node in root.iter("activity")
+                           if (node.get(android + "name") or "").endswith("MainActivity")), None)
+          if activity is None:
+              raise SystemExit("MainActivity não encontrada no AndroidManifest")
+          intent_filter = ET.SubElement(activity, "intent-filter")
+          ET.SubElement(intent_filter, "action").set(android + "name", "android.intent.action.SEND")
+          ET.SubElement(intent_filter, "category").set(android + "name", "android.intent.category.DEFAULT")
+          ET.SubElement(intent_filter, "data").set(android + "mimeType", "text/plain")
+          tree.write(manifest, encoding="utf-8", xml_declaration=True)
+          ET.parse(manifest)
+
+          kotlin = Path("android/app/src/main/kotlin/com/example/novelinha_app/MainActivity.kt")
+          kotlin.parent.mkdir(parents=True, exist_ok=True)
+          kotlin.write_text("""package com.example.novelinha_app
+
+          import android.content.Intent
+          import android.os.Bundle
+          import io.flutter.embedding.android.FlutterActivity
+          import io.flutter.embedding.engine.FlutterEngine
+          import io.flutter.plugin.common.MethodChannel
+
+          class MainActivity : FlutterActivity() {
+              private val channelName = "novelplay/share"
+              private var pendingSharedText: String? = null
+              private var shareChannel: MethodChannel? = null
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  pendingSharedText = sharedTextFrom(intent)
+                  super.onCreate(savedInstanceState)
+              }
+
+              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+                  super.configureFlutterEngine(flutterEngine)
+                  shareChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
+                  shareChannel?.setMethodCallHandler { call, result ->
+                      if (call.method == "getInitialSharedText") {
+                          result.success(pendingSharedText)
+                          pendingSharedText = null
+                      } else {
+                          result.notImplemented()
+                      }
+                  }
+              }
+
+              override fun onNewIntent(intent: Intent) {
+                  super.onNewIntent(intent)
+                  setIntent(intent)
+                  val text = sharedTextFrom(intent)
+                  if (text != null) {
+                      if (shareChannel == null) pendingSharedText = text
+                      else shareChannel?.invokeMethod("sharedText", text)
+                  }
+              }
+
+              private fun sharedTextFrom(intent: Intent?): String? {
+                  if (intent?.action != Intent.ACTION_SEND) return null
+                  if (intent.type != "text/plain") return null
+                  return intent.getStringExtra(Intent.EXTRA_TEXT)
+                      ?: intent.getStringExtra(Intent.EXTRA_HTML_TEXT)
+              }
+          }
+          """)
+          print("Compartilhamento Android text/plain configurado.")
+          PY
       - name: Configurar permissão de internet
         run: |
           set -euo pipefail
