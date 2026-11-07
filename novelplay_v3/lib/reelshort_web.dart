@@ -92,7 +92,7 @@ class _ReelShortPageState extends State<ReelShortPage> {
     final path = uri.path;
 
     // Episode URL: /episodes/episode-N-title-BOOK_ID-EPISODE_ID
-    final episodeMatch = RegExp(r'^/episodes/episode-\d+-(.+)-([a-fA-F0-9]{24})-([A-Za-z0-9_]+).firstMatch(path);
+    final episodeMatch = RegExp(r'^/episodes/episode-\d+-(.+)-([a-fA-F0-9]{24})-([A-Za-z0-9_]+)$').firstMatch(path);
     if (episodeMatch != null) {
       return {
         'slug': episodeMatch.group(1)!,
