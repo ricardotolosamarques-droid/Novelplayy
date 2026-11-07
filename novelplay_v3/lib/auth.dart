@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart';
 import 'drive_screen.dart';
+import 'link_import_screen.dart';
 
 const String _authBaseUrl = 'https://novelplay-api-ee5f.onrender.com';
 
@@ -127,10 +129,35 @@ class AuthGate extends StatefulWidget {
   State<AuthGate> createState() => _AuthGateState();
 }
 class _AuthGateState extends State<AuthGate> {
+  static const MethodChannel _shareChannel = MethodChannel('novelplay/share');
+  static const String _pendingLinksKey = 'novelplay_pending_shared_links';
   NovelUser? user;
   bool loading = true;
   @override
-  void initState() { super.initState(); _restore(); }
+  void initState() {
+    super.initState();
+    _shareChannel.setMethodCallHandler((call) async {
+      if (call.method == 'sharedText') await _saveSharedText(call.arguments);
+    });
+    _consumeInitialShare();
+    _restore();
+  }
+  Future<void> _consumeInitialShare() async {
+    try {
+      final value = await _shareChannel.invokeMethod<String>('getInitialSharedText');
+      if (value != null) await _saveSharedText(value);
+    } catch (_) {}
+  }
+  Future<void> _saveSharedText(dynamic value) async {
+    final incoming = (value ?? '').toString().trim();
+    if (incoming.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final previous = prefs.getString(_pendingLinksKey) ?? '';
+    final lines = <String>{...previous.split(RegExp(r'\\s+')), ...incoming.split(RegExp(r'\\s+'))}
+      ..removeWhere((item) => item.trim().isEmpty);
+    await prefs.setString(_pendingLinksKey, lines.join('\\n'));
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Links recebidos. Abra Importar do 1DM para revisar os episódios.')));
+  }
   Future<void> _restore() async {
     final restored = await NovelAuth.restore();
     if (!mounted) return;
@@ -153,6 +180,10 @@ class _AuthGateState extends State<AuthGate> {
           if (user!.isAdmin) IconButton(
             tooltip: 'Painel administrativo', icon: const Icon(Icons.admin_panel_settings_outlined),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminUsersScreen())),
+          ),
+          if (user!.isAdmin) IconButton(
+            tooltip: 'Importar links do 1DM', icon: const Icon(Icons.move_to_inbox_outlined),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LinkImportScreen())),
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.account_circle_outlined),
