@@ -12,7 +12,7 @@ const MethodChannel _shareChannel = MethodChannel('novelplay/share');
 final ValueNotifier<String?> _sharedUrl = ValueNotifier<String?>(null);
 
 String? _extractSharedUrl(String text) {
-  final match = RegExp(r'https?://[^\\s]+', caseSensitive: false).firstMatch(text);
+  final match = RegExp(r'https?://[^\s]+'.firstMatch(text);
   if (match == null) return null;
   final cleaned = match.group(0)!.replaceAll(RegExp(r'[),.]+
 
