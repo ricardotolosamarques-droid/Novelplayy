@@ -153,9 +153,9 @@ class _AuthGateState extends State<AuthGate> {
     if (incoming.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
     final previous = prefs.getString(_pendingLinksKey) ?? '';
-    final lines = <String>{...previous.split(RegExp(r'\\s+')), ...incoming.split(RegExp(r'\\s+'))}
+    final lines = <String>{...previous.split(RegExp(r'\s+')), ...incoming.split(RegExp(r'\s+'))}
       ..removeWhere((item) => item.trim().isEmpty);
-    await prefs.setString(_pendingLinksKey, lines.join('\\n'));
+    await prefs.setString(_pendingLinksKey, lines.join('\n'));
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Links recebidos. Abra Importar do 1DM para revisar os episódios.')));
   }
   Future<void> _restore() async {
