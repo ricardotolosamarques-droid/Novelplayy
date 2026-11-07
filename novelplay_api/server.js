@@ -702,6 +702,24 @@ app.post('/admin/catalog/series/:seriesId/episodes', authRequired, adminRequired
   }
 });
 
+app.delete('/admin/catalog/series/:seriesId', authRequired, adminRequired, async (req, res) => {
+  const seriesId = Number(req.params.seriesId);
+  if (!Number.isSafeInteger(seriesId) || seriesId < 1) {
+    return res.status(400).json({ error: 'Série inválida.' });
+  }
+  try {
+    const result = await pool.query(
+      'DELETE FROM catalog_series WHERE id = $1 RETURNING id, title',
+      [seriesId]
+    );
+    if (!result.rowCount) return res.status(404).json({ error: 'Publicação não encontrada.' });
+    return res.json({ deleted: true, series: { id: String(result.rows[0].id), title: result.rows[0].title } });
+  } catch (error) {
+    console.error('Erro ao excluir publicação:', error.message);
+    return res.status(500).json({ error: 'Não foi possível excluir a publicação.' });
+  }
+});
+
 app.get('/admin/users', authRequired, adminRequired, async (req, res) => {
   if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Acesso exclusivo do administrador.' });
   try {
