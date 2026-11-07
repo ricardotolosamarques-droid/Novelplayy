@@ -121,6 +121,22 @@ class NovelAuth {
       'number': number, 'title': title, 'videoUrl': videoUrl,
     });
   }
+
+  static Future<void> deleteSeries(String seriesId) async {
+    final saved = await token();
+    if (saved == null) throw Exception('Sua sessão terminou. Entre novamente.');
+    final response = await http.delete(
+      Uri.parse('$_authBaseUrl/admin/catalog/series/$seriesId'),
+      headers: {'Authorization': 'Bearer $saved'},
+    ).timeout(const Duration(seconds: 25));
+    Map<String, dynamic> data;
+    try { data = jsonDecode(response.body) as Map<String, dynamic>; }
+    catch (_) { throw Exception('Resposta inválida do servidor (${response.statusCode}).'); }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw _AuthHttpException(response.statusCode,
+        '${data['error'] ?? 'Não foi possível excluir a publicação.'}');
+    }
+  }
 }
 
 class AuthGate extends StatefulWidget {
@@ -290,6 +306,37 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     title.dispose(); synopsis.dispose(); cover.dispose();
   }
 
+  Future<void> _deleteSeries(Map<String, dynamic> series) async {
+    final title = '${series['title'] ?? 'esta novelinha'}';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Excluir publicação?'),
+        content: Text('Deseja excluir "$title" e todos os episódios dela? Essa ação não pode ser desfeita.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await NovelAuth.deleteSeries('${series['id']}');
+      _reload();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Publicação excluída.')),
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Falha ao excluir publicação: $e')),
+      );
+    }
+  }
+
   Future<void> _addEpisode(Map<String, dynamic> series) async {
     final number = TextEditingController(), title = TextEditingController(), url = TextEditingController();
     final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
@@ -356,7 +403,14 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           for (final item in series) Card(color: const Color(0xff1b1b27), child: ListTile(
             leading: const Icon(Icons.movie_outlined), title: Text('${item['title'] ?? ''}'),
             subtitle: Text('${(item['episodes'] as List? ?? const []).length} episódios'),
-            trailing: IconButton(tooltip: 'Adicionar episódio', icon: const Icon(Icons.add_circle_outline), onPressed: () => _addEpisode(item)),
+            trailing: Wrap(spacing: 2, children: [
+              IconButton(tooltip: 'Adicionar episódio', icon: const Icon(Icons.add_circle_outline), onPressed: () => _addEpisode(item)),
+              IconButton(
+                tooltip: 'Excluir publicação',
+                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                onPressed: () => _deleteSeries(item),
+              ),
+            ]),
           )),
           if (series.isEmpty) const Padding(padding: EdgeInsets.all(20), child: Text('Nenhuma novelinha cadastrada no catálogo administrativo.')),
         ]);
