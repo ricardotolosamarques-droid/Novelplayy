@@ -122,3 +122,14 @@ Os workflows de Android usam o identificador `com.example.novelinha_app`. Para c
 
 A chave de depuração criada no CI é temporária. O fingerprint pode mudar na próxima execução. Para atualizações contínuas com o mesmo cliente OAuth, ainda será preciso adotar uma chave persistente protegida por secret do GitHub.
 
+## Login e painel administrativo — correção 0.5.7
+
+A tela de autenticação continua sendo a entrada do aplicativo quando não há sessão válida. O menu do perfil no topo permite **Trocar conta / abrir login** ou sair. A sessão salva o perfil localmente para suportar o tempo de inicialização do plano gratuito do Render; o token continua sendo validado pelo endpoint `/auth/me`, e sessões rejeitadas com HTTP 401/404 são apagadas.
+
+O painel administrativo agora possui duas áreas:
+- **Usuários:** lista as contas cadastradas por meio de `GET /admin/users`.
+- **Catálogo:** lista as novelinhas publicadas e permite cadastrar uma série e adicionar episódios com link HTTPS, usando os endpoints protegidos `POST /admin/catalog/series` e `POST /admin/catalog/series/:id/episodes`.
+
+O botão administrativo só aparece quando o backend confirma `role=admin`. O usuário administrador é criado pelo serviço Render com as variáveis `ADMIN_USERNAME`, `ADMIN_EMAIL` e `ADMIN_PASSWORD`; o painel exige que essas variáveis estejam configuradas corretamente no serviço. O app usa a API implantada em `https://novelplay-api-ee5f.onrender.com`.
+
+A compilação Android desta alteração é disparada automaticamente pelo GitHub Actions. A funcionalidade ainda precisa ser validada em aparelho com login real de usuário e administrador; a compilação, isoladamente, não comprova que a senha/conta administrativa configurada no Render está correta.
