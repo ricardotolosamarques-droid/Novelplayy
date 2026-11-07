@@ -380,7 +380,7 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
     var nextNumber = firstNumber;
     for (final match in matches) {
       var link = match.group(0)!;
-      while (link.isNotEmpty && RegExp(r"""[),.;\]}'"]+$""").hasMatch(link.substring(link.length - 1))) {
+      while (link.isNotEmpty && [',', ')', ';', '.', ']', '}', '"', "'"].contains(link.substring(link.length - 1))) {
         link = link.substring(0, link.length - 1);
       }
       final uri = Uri.tryParse(link);
