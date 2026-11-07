@@ -16,19 +16,48 @@ class NovelUser {
   bool get isAdmin => role == 'admin';
 }
 
+class _AuthHttpException implements Exception {
+  final int statusCode;
+  final String message;
+  const _AuthHttpException(this.statusCode, this.message);
+  @override String toString() => message;
+}
+
 class NovelAuth {
   static const _tokenKey = 'novelplay_auth_token';
+  static const _userKey = 'novelplay_auth_user';
   static Future<String?> token() async => (await SharedPreferences.getInstance()).getString(_tokenKey);
-  static Future<void> saveToken(String value) async => (await SharedPreferences.getInstance()).setString(_tokenKey, value);
-  static Future<void> logout() async => (await SharedPreferences.getInstance()).remove(_tokenKey);
+  static Future<void> saveSession(String value, NovelUser user) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_tokenKey, value);
+    await prefs.setString(_userKey, jsonEncode({
+      'id': user.id, 'username': user.username, 'email': user.email, 'role': user.role,
+    }));
+  }
+  static Future<void> logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_tokenKey);
+    await prefs.remove(_userKey);
+  }
+  static Future<NovelUser?> _cachedUser() async {
+    final raw = (await SharedPreferences.getInstance()).getString(_userKey);
+    if (raw == null) return null;
+    try { return NovelUser.fromJson(jsonDecode(raw) as Map<String, dynamic>); }
+    catch (_) { return null; }
+  }
 
   static Future<Map<String, dynamic>> _request(String path, {Map<String, dynamic>? body, String? bearer}) async {
     final response = await (body == null
       ? http.get(Uri.parse('$_authBaseUrl$path'), headers: bearer == null ? {} : {'Authorization': 'Bearer $bearer'})
-      : http.post(Uri.parse('$_authBaseUrl$path'), headers: {'Content-Type': 'application/json'}, body: jsonEncode(body)))
+      : http.post(Uri.parse('$_authBaseUrl$path'), headers: {'Content-Type': 'application/json', if (bearer != null) 'Authorization': 'Bearer $bearer'}, body: jsonEncode(body)))
       .timeout(const Duration(seconds: 25));
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    if (response.statusCode < 200 || response.statusCode >= 300) throw Exception(data['error'] ?? 'Não foi possível concluir a solicitação.');
+    Map<String, dynamic> data;
+    try { data = jsonDecode(response.body) as Map<String, dynamic>; }
+    catch (_) { throw Exception('Resposta inválida do servidor (${response.statusCode}).'); }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw _AuthHttpException(response.statusCode,
+        '${data['error'] ?? 'Não foi possível concluir a solicitação.'}');
+    }
     return data;
   }
 
@@ -37,18 +66,26 @@ class NovelAuth {
     if (saved == null) return null;
     try {
       final data = await _request('/auth/me', bearer: saved);
-      return NovelUser.fromJson(data['user'] as Map<String, dynamic>);
-    } catch (_) {
-      // Falhas temporárias de rede/servidor não devem apagar a credencial.
-      // Uma resposta de autenticação inválida será tratada quando a API voltar.
-      return null;
+      final user = NovelUser.fromJson(data['user'] as Map<String, dynamic>);
+      await (await SharedPreferences.getInstance()).setString(_userKey, jsonEncode({
+        'id': user.id, 'username': user.username, 'email': user.email, 'role': user.role,
+      }));
+      return user;
+    } catch (error) {
+      if (error is _AuthHttpException &&
+          (error.statusCode == 401 || error.statusCode == 404)) {
+        await logout();
+        return null;
+      }
+      return _cachedUser();
     }
   }
 
   static Future<NovelUser> login(String identity, String password) async {
     final data = await _request('/auth/login', body: {'identity': identity, 'password': password});
-    await saveToken(data['token'] as String);
-    return NovelUser.fromJson(data['user'] as Map<String, dynamic>);
+    final user = NovelUser.fromJson(data['user'] as Map<String, dynamic>);
+    await saveSession(data['token'] as String, user);
+    return user;
   }
 
   static Future<NovelUser> register(String username, String email, String password) async {
@@ -62,6 +99,24 @@ class NovelAuth {
     if (saved == null) throw Exception('Faça login novamente.');
     final data = await _request('/admin/users', bearer: saved);
     return (data['users'] as List).cast<Map<String, dynamic>>();
+  }
+  static Future<List<Map<String, dynamic>>> catalog() async {
+    final data = await _request('/catalog');
+    return (data['series'] as List? ?? const []).cast<Map<String, dynamic>>();
+  }
+  static Future<void> createSeries(String title, String synopsis, String coverUrl) async {
+    final saved = await token();
+    if (saved == null) throw Exception('Sua sessão terminou. Entre novamente.');
+    await _request('/admin/catalog/series', bearer: saved, body: {
+      'title': title, 'synopsis': synopsis, 'coverUrl': coverUrl,
+    });
+  }
+  static Future<void> addEpisode(String seriesId, int number, String title, String videoUrl) async {
+    final saved = await token();
+    if (saved == null) throw Exception('Sua sessão terminou. Entre novamente.');
+    await _request('/admin/catalog/series/$seriesId/episodes', bearer: saved, body: {
+      'number': number, 'title': title, 'videoUrl': videoUrl,
+    });
   }
 }
 
@@ -100,8 +155,8 @@ class _AuthGateState extends State<AuthGate> {
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.account_circle_outlined),
-            onSelected: (value) { if (value == 'logout') _signOut(); },
-            itemBuilder: (_) => [PopupMenuItem(enabled: false, child: Text(user!.username)), const PopupMenuItem(value: 'logout', child: Text('Sair da conta'))],
+            onSelected: (value) { if (value == 'logout' || value == 'switch') _signOut(); },
+            itemBuilder: (_) => [PopupMenuItem(enabled: false, child: Text(user!.username)), const PopupMenuItem(value: 'switch', child: Text('Trocar conta / abrir login')), const PopupMenuItem(value: 'logout', child: Text('Sair da conta'))],
           ),
         ],
       ),
@@ -175,15 +230,78 @@ class AdminUsersScreen extends StatefulWidget {
   State<AdminUsersScreen> createState() => _AdminUsersScreenState();
 }
 class _AdminUsersScreenState extends State<AdminUsersScreen> {
-  late Future<List<Map<String, dynamic>>> request = NovelAuth.users();
+  late Future<List<Map<String, dynamic>>> usersRequest = NovelAuth.users();
+  late Future<List<Map<String, dynamic>>> catalogRequest = NovelAuth.catalog();
+  void _reload() => setState(() { usersRequest = NovelAuth.users(); catalogRequest = NovelAuth.catalog(); });
+
+  Future<void> _createSeries() async {
+    final title = TextEditingController(), synopsis = TextEditingController(), cover = TextEditingController();
+    final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('Adicionar novelinha'),
+      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: title, decoration: const InputDecoration(labelText: 'Nome da novelinha')),
+        const SizedBox(height: 10),
+        TextField(controller: synopsis, decoration: const InputDecoration(labelText: 'Sinopse'), maxLines: 3),
+        const SizedBox(height: 10),
+        TextField(controller: cover, decoration: const InputDecoration(labelText: 'URL da capa (opcional)')),
+      ])),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salvar'))],
+    ));
+    if (ok == true && title.text.trim().isNotEmpty) {
+      try {
+        await NovelAuth.createSeries(title.text.trim(), synopsis.text.trim(), cover.text.trim());
+        _reload();
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Novelinha cadastrada.')));
+      } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao cadastrar: $e'))); }
+    }
+    title.dispose(); synopsis.dispose(); cover.dispose();
+  }
+
+  Future<void> _addEpisode(Map<String, dynamic> series) async {
+    final number = TextEditingController(), title = TextEditingController(), url = TextEditingController();
+    final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: Text('Episódio • ${series['title']}'),
+      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: number, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Número do episódio')),
+        const SizedBox(height: 10),
+        TextField(controller: title, decoration: const InputDecoration(labelText: 'Título')),
+        const SizedBox(height: 10),
+        TextField(controller: url, decoration: const InputDecoration(labelText: 'Link HTTPS do vídeo')),
+      ])),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salvar episódio'))],
+    ));
+    if (ok == true) {
+      try {
+        await NovelAuth.addEpisode('${series['id']}', int.parse(number.text), title.text.trim(), url.text.trim());
+        _reload();
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Episódio salvo.')));
+      } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha ao salvar episódio: $e'))); }
+    }
+    number.dispose(); title.dispose(); url.dispose();
+  }
+
+  Widget _error(Object error) => Center(child: Padding(
+    padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Text('Não foi possível carregar esta área: $error', textAlign: TextAlign.center),
+      const SizedBox(height: 12), OutlinedButton.icon(onPressed: _reload, icon: const Icon(Icons.refresh), label: const Text('Tentar novamente')),
+    ]),
+  ));
+
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => DefaultTabController(length: 2, child: Scaffold(
     backgroundColor: const Color(0xff101018),
-    appBar: AppBar(title: const Text('Painel administrativo')),
-    body: FutureBuilder<List<Map<String, dynamic>>>(
-      future: request,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Erro: ${snapshot.error}')));
+    appBar: AppBar(title: const Text('Painel administrativo'), actions: [
+      IconButton(tooltip: 'Atualizar', onPressed: _reload, icon: const Icon(Icons.refresh)),
+    ], bottom: const TabBar(tabs: [Tab(text: 'USUÁRIOS'), Tab(text: 'CATÁLOGO')])),
+    floatingActionButton: Builder(builder: (ctx) => FloatingActionButton.extended(
+      onPressed: () { if (DefaultTabController.of(ctx).index == 1) _createSeries(); else _reload(); },
+      icon: const Icon(Icons.add), label: const Text('Nova novelinha'),
+    )),
+    body: TabBarView(children: [
+      FutureBuilder<List<Map<String, dynamic>>>(future: usersRequest, builder: (context, snapshot) {
+        if (snapshot.hasError) return _error(snapshot.error!);
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final users = snapshot.data!;
         return ListView(padding: const EdgeInsets.all(16), children: [
@@ -195,7 +313,22 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             trailing: Text(item['role'] == 'admin' ? 'ADMIN' : 'USUÁRIO', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
           )),
         ]);
-      },
-    ),
-  );
+      }),
+      FutureBuilder<List<Map<String, dynamic>>>(future: catalogRequest, builder: (context, snapshot) {
+        if (snapshot.hasError) return _error(snapshot.error!);
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        final series = snapshot.data!;
+        return ListView(padding: const EdgeInsets.all(16), children: [
+          Text('Novelinha cadastradas: ${series.length}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          for (final item in series) Card(color: const Color(0xff1b1b27), child: ListTile(
+            leading: const Icon(Icons.movie_outlined), title: Text('${item['title'] ?? ''}'),
+            subtitle: Text('${(item['episodes'] as List? ?? const []).length} episódios'),
+            trailing: IconButton(tooltip: 'Adicionar episódio', icon: const Icon(Icons.add_circle_outline), onPressed: () => _addEpisode(item)),
+          )),
+          if (series.isEmpty) const Padding(padding: EdgeInsets.all(20), child: Text('Nenhuma novelinha cadastrada no catálogo administrativo.')),
+        ]);
+      }),
+    ]),
+  ));
 }
