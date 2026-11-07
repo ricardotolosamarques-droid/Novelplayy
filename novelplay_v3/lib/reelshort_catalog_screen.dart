@@ -367,10 +367,9 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
 
     final firstNumber = int.tryParse(start.text.trim());
     final rawText = links.text.trim();
-    // O IDM pode copiar/exportar nomes, tamanhos e URLs no mesmo texto.
+    // O IDM pode copiar nomes, tamanhos e URLs no mesmo texto.
     // Extraímos somente URLs HTTPS e ignoramos os demais campos da listagem.
-    final urlPattern = RegExp(r'https://[^\\s<>"\\']+', caseSensitive: false);
-    final matches = urlPattern.allMatches(rawText).toList();
+    final matches = RegExp(r'https://[^\s<>]+', caseSensitive: false).allMatches(rawText).toList();
     if (firstNumber == null || firstNumber < 1 || matches.isEmpty || matches.length > 1000) {
       _show('Informe um número inicial válido e cole uma lista do IDM com até 1000 links HTTPS.');
       start.dispose(); links.dispose(); return;
@@ -380,8 +379,33 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
     final usedNumbers = <int>{};
     var nextNumber = firstNumber;
     for (final match in matches) {
-      var link = match.group(0)!.replaceFirst(RegExp(r'[),.;\\]}]+
+      var link = match.group(0)!;
+      while (link.isNotEmpty && RegExp(r"""[),.;\]}'"]+$""").hasMatch(link.substring(link.length - 1))) {
+        link = link.substring(0, link.length - 1);
+      }
+      final uri = Uri.tryParse(link);
+      if (uri == null || uri.scheme != 'https' || uri.host.isEmpty || link.length > 8000) continue;
 
+      final lineStart = rawText.lastIndexOf('\n', match.start);
+      final lineEndFound = rawText.indexOf('\n', match.end);
+      final lineEnd = lineEndFound < 0 ? rawText.length : lineEndFound;
+      final sourceLine = rawText.substring(lineStart < 0 ? 0 : lineStart + 1, lineEnd);
+      final explicit = RegExp(r'(?:epis[oó]dio|episode|ep|cap[ií]tulo|chapter)[\s._-]*0*(\d+)', caseSensitive: false).firstMatch(sourceLine)
+          ?? RegExp(r'^\s*(\d+)\s*[|;:]').firstMatch(sourceLine)
+          ?? RegExp(r'(?:episode|ep|episodio|chapter)[-_ ]*0*(\d+)', caseSensitive: false).firstMatch(link);
+      var number = explicit == null ? nextNumber : int.parse(explicit.group(1)!);
+      while (usedNumbers.contains(number)) {
+        if (explicit != null) { number = nextNumber; } else { number++; }
+      }
+      if (number < 1 || number > 100000 || usedNumbers.contains(number)) continue;
+      usedNumbers.add(number);
+      parsed.add({'number': number, 'title': 'Episódio $number', 'videoUrl': link});
+      if (number >= nextNumber) nextNumber = number + 1;
+    }
+    if (parsed.isEmpty) {
+      _show('Não encontrei links HTTPS válidos na lista copiada do IDM.');
+      start.dispose(); links.dispose(); return;
+    }
     var saved = 0;
     try {
       final prefs = await SharedPreferences.getInstance();
