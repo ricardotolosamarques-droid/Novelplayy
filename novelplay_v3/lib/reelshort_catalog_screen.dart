@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 import 'catalog.dart';
+import 'reelshort_web.dart';
+import 'download_manager.dart';
 
 const _catalogApi = 'https://novelplay-api-ee5f.onrender.com';
 
@@ -223,6 +225,8 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
     appBar: AppBar(title: const Text('ReelShort'), actions: [
       if (widget.isAdmin) IconButton(tooltip: 'Importar pelo link do ReelShort', onPressed: _importSeriesFromLink, icon: const Icon(Icons.download_for_offline_outlined)),
       if (widget.isAdmin) IconButton(tooltip: 'Adicionar série manualmente', onPressed: _createSeries, icon: const Icon(Icons.add_circle_outline)),
+      if (widget.isAdmin) IconButton(tooltip: 'Navegador e detector de mídia', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ReelShortPage(url: Uri.parse('https://www.reelshort.com/'), title: 'ReelShort'))), icon: const Icon(Icons.language)),
+      if (widget.isAdmin) IconButton(tooltip: 'Fila de downloads', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DownloadManagerScreen())), icon: const Icon(Icons.download_for_offline_outlined)),
       IconButton(tooltip: 'Atualizar', onPressed: _refresh, icon: const Icon(Icons.refresh)),
     ]),
     body: FutureBuilder<List<Map<String, dynamic>>>(
