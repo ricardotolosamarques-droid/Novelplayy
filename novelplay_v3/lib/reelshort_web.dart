@@ -112,6 +112,18 @@ class _ReelShortPageState extends State<ReelShortPage> {
                   tooltip: 'Adicionar à fila',
                   icon: const Icon(Icons.add_circle_outline),
                   onPressed: () async {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (dialogContext) => AlertDialog(
+                        title: const Text('Confirmar autorização'),
+                        content: const Text('Você confirma que tem direito de baixar e guardar este arquivo? O NovelPlay não baixa conteúdo protegido por DRM nem contorna assinaturas.'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+                          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Confirmo')),
+                        ],
+                      ),
+                    );
+                    if (confirmed != true) return;
                     final added = await DownloadQueue.instance.add(mediaUrl);
                     if (!sheetContext.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(added ? 'Arquivo adicionado à fila.' : 'Endereço incompatível.')));
