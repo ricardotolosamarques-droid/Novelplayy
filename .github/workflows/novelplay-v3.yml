@@ -145,3 +145,5 @@ jobs:
           name: NovelPlay-Galaxy-A34-arm64
           path: novelplay_v3/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           if-no-files-found: error
+
+# Build solicitado: gerar APK atualizado para a importação de links em lote.
