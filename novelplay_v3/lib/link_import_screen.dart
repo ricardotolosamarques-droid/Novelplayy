@@ -13,8 +13,9 @@ class LinkImportScreen extends StatefulWidget {
 }
 class _LinkImportScreenState extends State<LinkImportScreen> {
   final _title = TextEditingController(), _synopsis = TextEditingController(), _cover = TextEditingController(), _links = TextEditingController();
-  bool _authorized = false, _busy = false;
-  String? _error;
+  bool _authorized = false, _busy = false, _metadataBusy = false;
+  String? _error, _metadataStatus;
+  List<Map<String, dynamic>> _metadataCandidates = [];
   @override
   void initState() { super.initState(); _loadQueue(); }
   Future<void> _loadQueue() async {
@@ -22,6 +23,7 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
     _links.text = prefs.getString(_queueKey) ?? '';
     _suggestTitle();
     if (mounted) setState(() {});
+    await _lookupMetadata();
   }
   List<Uri> _extractLinks() {
     final seen = <String>{};
@@ -47,6 +49,60 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
     final links = _extractLinks();
     if (links.isNotEmpty && _title.text.trim().isEmpty) _title.text = _suggestedName(links.first);
   }
+
+  String _normalizeTitle(String value) => value
+    .toLowerCase()
+    .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+    .trim();
+
+  Future<void> _lookupMetadata() async {
+    final query = _title.text.trim();
+    if (query.isEmpty || query.toLowerCase() == 'novelinha') {
+      if (mounted) setState(() => _metadataStatus = 'Não consegui identificar o título pelo link. Informe o nome para pesquisar automaticamente.');
+      return;
+    }
+    if (mounted) setState(() { _metadataBusy = true; _metadataStatus = 'Buscando capa e sinopse...'; _metadataCandidates = []; });
+    try {
+      final uri = Uri.parse('$_api/reelshort/search').replace(queryParameters: {'keywords': query});
+      final response = await http.get(uri, headers: {'Accept': 'application/json'}).timeout(const Duration(seconds: 20));
+      if (response.statusCode != 200) throw Exception('Pesquisa de catálogo indisponível (HTTP ${response.statusCode}).');
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      final results = data is Map && data['results'] is List
+        ? (data['results'] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).where((e) => (e['book_title'] ?? '').toString().trim().isNotEmpty).toList()
+        : <Map<String, dynamic>>[];
+      if (!mounted) return;
+      if (results.isEmpty) {
+        setState(() => _metadataStatus = 'Não encontrei uma correspondência segura. Você pode revisar o nome e pesquisar novamente.');
+        return;
+      }
+      final normalized = _normalizeTitle(query);
+      final exact = results.where((e) => _normalizeTitle((e['book_title'] ?? '').toString()) == normalized).toList();
+      if (exact.length == 1) {
+        _applyMetadata(exact.first);
+        setState(() => _metadataStatus = 'Capa e sinopse encontradas automaticamente.');
+      } else {
+        setState(() {
+          _metadataCandidates = results.take(8).toList();
+          _metadataStatus = 'Encontrei possíveis correspondências. Escolha a novelinha correta para preencher capa e sinopse.';
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _metadataStatus = 'Não foi possível pesquisar agora. ${e.toString().replaceFirst('Exception: ', '')}');
+    } finally {
+      if (mounted) setState(() => _metadataBusy = false);
+    }
+  }
+
+  void _applyMetadata(Map<String, dynamic> item) {
+    final title = (item['book_title'] ?? '').toString().trim();
+    final synopsis = (item['special_desc'] ?? '').toString().trim();
+    final cover = (item['book_pic'] ?? '').toString().trim();
+    if (title.isNotEmpty) _title.text = title;
+    if (synopsis.isNotEmpty) _synopsis.text = synopsis;
+    if (cover.startsWith('https://')) _cover.text = cover;
+    _metadataCandidates = [];
+  }
+
   Future<void> _import() async {
     final links = _extractLinks();
     if (_title.text.trim().isEmpty) { setState(() => _error = 'Informe o nome da novelinha.'); return; }
@@ -93,14 +149,31 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
       const SizedBox(height: 12),
       TextField(controller: _synopsis, maxLines: 2, decoration: const InputDecoration(labelText: 'Sinopse (opcional)')),
       const SizedBox(height: 12),
-      TextField(controller: _cover, decoration: const InputDecoration(labelText: 'URL HTTPS da capa (opcional)')),
+      TextField(controller: _cover, decoration: const InputDecoration(labelText: 'Capa (preenchida automaticamente quando encontrada)')),
+      if (_cover.text.trim().startsWith('https://'))
+        Padding(padding: const EdgeInsets.only(top: 8), child: ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(_cover.text.trim(), height: 150, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const SizedBox.shrink()))),
+      const SizedBox(height: 8),
+      Row(children: [
+        Expanded(child: Text(_metadataStatus ?? 'O NovelPlay tentará localizar os dados da novelinha.', style: const TextStyle(color: Colors.white70, fontSize: 12))),
+        IconButton(onPressed: _metadataBusy ? null : _lookupMetadata, tooltip: 'Pesquisar capa e sinopse', icon: _metadataBusy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.auto_awesome)),
+      ]),
+      for (final item in _metadataCandidates)
+        Card(child: ListTile(
+          leading: (item['book_pic'] ?? '').toString().startsWith('https://')
+            ? Image.network(item['book_pic'].toString(), width: 44, height: 60, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.movie))
+            : const Icon(Icons.movie),
+          title: Text((item['book_title'] ?? 'Novelinha').toString()),
+          subtitle: Text((item['special_desc'] ?? '').toString(), maxLines: 2, overflow: TextOverflow.ellipsis),
+          trailing: const Icon(Icons.check_circle_outline),
+          onTap: () => setState(() { _applyMetadata(item); _metadataStatus = 'Dados preenchidos. Confira antes de publicar.'; }),
+        )),
       const SizedBox(height: 12),
       TextField(controller: _links, minLines: 7, maxLines: 12, decoration: const InputDecoration(labelText: 'Links dos episódios', hintText: 'Um link HTTPS por linha'), onChanged: (_) { _suggestTitle(); setState(() {}); }),
       const SizedBox(height: 8),
       Text('${_extractLinks().length} links válidos • numeração automática', style: const TextStyle(color: Colors.white70, fontSize: 12)),
       CheckboxListTile(contentPadding: EdgeInsets.zero, value: _authorized, onChanged: (v) => setState(() => _authorized = v ?? false), title: const Text('Tenho autorização para reproduzir e distribuir estes vídeos.'), controlAffinity: ListTileControlAffinity.leading),
       if (_error != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(_error!, style: const TextStyle(color: Colors.redAccent))),
-      FilledButton.icon(onPressed: _busy ? null : _import, icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.cloud_upload_outlined), label: Text(_busy ? 'Importando...' : 'Importar ${_extractLinks().length} episódios')),
+      FilledButton.icon(onPressed: _busy ? null : _import, icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.cloud_upload_outlined), label: Text(_busy ? 'Publicando...' : 'Confirmar e publicar ${_extractLinks().length} episódios')),
     ]),
   );
 }
