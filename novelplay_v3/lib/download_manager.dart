@@ -13,7 +13,7 @@ class DownloadTask {
   DownloadStatus status = DownloadStatus.waiting;
   int received = 0, total = 0;
   String? error, localPath;
-  double get progress => total > 0 ? (received / total).clamp(0.0, 1.0) : 0;
+  double get progress => total > 0 ? (received / total).clamp(0.0, 1.0).toDouble() : 0.0;
   Map<String, dynamic> toJson() => {'url': url, 'fileName': fileName, 'status': status.name, 'localPath': localPath};
   static DownloadTask? fromJson(dynamic v) {
     if (v is! Map) return null;
@@ -144,23 +144,24 @@ class DownloadQueue extends ChangeNotifier {
       final folder = Directory(dir.path + '/NovelPlayDownloads');
       if (!await folder.exists()) await folder.create(recursive: true);
       var name = t.fileName;
-      file = File(folder.path + '/' + name);
+      var targetFile = File(folder.path + '/' + name);
       var suffix = 1;
-      while (await file.exists()) {
+      while (await targetFile.exists()) {
         final dot = t.fileName.lastIndexOf('.');
         name = dot > 0 ? t.fileName.substring(0, dot) + ' (' + suffix.toString() + ')' + t.fileName.substring(dot) : t.fileName + ' (' + suffix.toString() + ')';
-        file = File(folder.path + '/' + name);
+        targetFile = File(folder.path + '/' + name);
         suffix++;
       }
-      sink = file.openWrite();
+      file = targetFile;
+      sink = targetFile.openWrite();
       await for (final chunk in res.stream) {
         if (t.status == DownloadStatus.cancelled) throw const HttpException('Cancelado');
-        sink.add(chunk);
+        sink!.add(chunk);
         t.received += chunk.length;
         notifyListeners();
       }
-      await sink.flush();
-      await sink.close();
+      await sink!.flush();
+      await sink!.close();
       sink = null;
       if (t.status == DownloadStatus.cancelled) {
         if (await file.exists()) await file.delete();
