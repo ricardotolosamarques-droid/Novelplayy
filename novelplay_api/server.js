@@ -618,21 +618,21 @@ app.post('/admin/catalog/import-links', authRequired, async (req, res) => {
   try {
     await client.query('BEGIN');
     const seriesResult = await client.query(
-      \`INSERT INTO catalog_series (title, synopsis, cover_url)
+      `INSERT INTO catalog_series (title, synopsis, cover_url)
        VALUES ($1, $2, $3)
        ON CONFLICT (title) DO UPDATE
          SET synopsis = EXCLUDED.synopsis,
              cover_url = CASE WHEN EXCLUDED.cover_url <> '' THEN EXCLUDED.cover_url ELSE catalog_series.cover_url END
-       RETURNING id, title\`,
+       RETURNING id, title`,
       [title, synopsis, coverUrl]
     );
     const seriesId = seriesResult.rows[0].id;
     for (const episode of normalized) {
       await client.query(
-        \`INSERT INTO catalog_episodes (series_id, episode_number, title, video_url)
+        `INSERT INTO catalog_episodes (series_id, episode_number, title, video_url)
          VALUES ($1, $2, $3, $4)
          ON CONFLICT (series_id, episode_number) DO UPDATE
-           SET title = EXCLUDED.title, video_url = EXCLUDED.video_url\`,
+           SET title = EXCLUDED.title, video_url = EXCLUDED.video_url`,
         [seriesId, episode.number, episode.title, episode.videoUrl]
       );
     }
