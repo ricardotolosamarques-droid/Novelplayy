@@ -90,9 +90,25 @@ class _ReelShortPageState extends State<ReelShortPage> {
     final uri = Uri.tryParse(raw);
     if (uri == null || uri.scheme != 'https' || !ReelShortPage._isAllowedHost(uri.host)) return null;
     final path = uri.path;
-    // ReelShort episode links use /episodes/episode-N-title-BOOKID-EPISODEID.
-    // The 24-character book ID is the series identity; the final token is only the episode ID.
-    final episodeMatch = RegExp(r'^/episodes/episode-\\d+-(.+)-([a-fA-F0-9]{24})-([A-Za-z0-9_]+)
+
+    // Episode URL: /episodes/episode-N-title-BOOK_ID-EPISODE_ID
+    final episodeMatch = RegExp(r'^/episodes/episode-\\d+-(.+)-([a-fA-F0-9]{24})-([A-Za-z0-9_]+)$').firstMatch(path);
+    if (episodeMatch != null) {
+      return {
+        'slug': episodeMatch.group(1)!,
+        'id': episodeMatch.group(2)!,
+        'episodeId': episodeMatch.group(3)!,
+        'url': uri.toString(),
+      };
+    }
+
+    if (!(path.startsWith('/movie/') || path.startsWith('/id/movie/') ||
+        RegExp(r'^/[a-z]{2}/full-episodes/').hasMatch(path))) return null;
+    var part = uri.pathSegments.isEmpty ? '' : uri.pathSegments.last;
+    if (part.toLowerCase().endsWith('.html')) part = part.substring(0, part.length - 5);
+    final match = RegExp(r'^(.+)-([a-fA-F0-9]{24})$').firstMatch(part);
+    if (match == null) return null;
+    return {'slug': match.group(1)!, 'id': match.group(2)!, 'url': uri.toString()};
   }
 
   Future<Map<String, dynamic>> _fetchSeries() async {
