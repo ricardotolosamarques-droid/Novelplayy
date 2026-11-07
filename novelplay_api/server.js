@@ -5,6 +5,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
 const rateLimit = require('express-rate-limit');
+const crypto = require('crypto');
+const { google } = require('googleapis');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -39,6 +41,16 @@ async function initializeDatabase() {
       password_hash TEXT NOT NULL,
       role VARCHAR(16) NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS google_drive_credentials (
+      id SMALLINT PRIMARY KEY CHECK (id = 1),
+      refresh_token_enc TEXT NOT NULL,
+      refresh_token_iv TEXT NOT NULL,
+      refresh_token_tag TEXT NOT NULL,
+      connected_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 
@@ -143,6 +155,130 @@ async function adminRequired(req, res, next) {
     return res.status(500).json({ error: 'Não foi possível validar a permissão administrativa.' });
   }
 }
+
+
+/*
+ * Google Drive OAuth: o refresh token é cifrado no PostgreSQL usando uma chave
+ * derivada do JWT_SECRET. Nunca devolvemos tokens ao aplicativo.
+ */
+const googleDriveLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false });
+
+function googleOAuthClient() {
+  const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI } = process.env;
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI) {
+    throw new Error('Configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET e GOOGLE_REDIRECT_URI no Render.');
+  }
+  return new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI);
+}
+
+function googleTokenKey() {
+  return crypto.createHash('sha256').update(process.env.JWT_SECRET + ':novelplay-google-drive').digest();
+}
+
+function encryptGoogleRefreshToken(token) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', googleTokenKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()]);
+  return { encrypted: encrypted.toString('base64'), iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64') };
+}
+
+function decryptGoogleRefreshToken(row) {
+  const decipher = crypto.createDecipheriv('aes-256-gcm', googleTokenKey(), Buffer.from(row.refresh_token_iv, 'base64'));
+  decipher.setAuthTag(Buffer.from(row.refresh_token_tag, 'base64'));
+  return Buffer.concat([
+    decipher.update(Buffer.from(row.refresh_token_enc, 'base64')),
+    decipher.final()
+  ]).toString('utf8');
+}
+
+app.get('/admin/google-drive/connect', authRequired, adminRequired, googleDriveLimiter, async (req, res) => {
+  try {
+    const oauth2 = googleOAuthClient();
+    const state = jwt.sign(
+      { purpose: 'google-drive-oauth', adminId: String(req.auth.sub) },
+      process.env.JWT_SECRET,
+      { expiresIn: '10m', issuer: 'novelplay-api', audience: 'novelplay-google-drive' }
+    );
+    const authorizationUrl = oauth2.generateAuthUrl({
+      access_type: 'offline',
+      prompt: 'consent',
+      include_granted_scopes: true,
+      scope: ['https://www.googleapis.com/auth/drive.readonly'],
+      state
+    });
+    return res.json({ authorizationUrl });
+  } catch (error) {
+    console.error('Erro ao iniciar conexão com Google Drive:', error.message);
+    return res.status(503).json({ error: error.message });
+  }
+});
+
+app.get('/google-drive/callback', googleDriveLimiter, async (req, res) => {
+  try {
+    if (req.query.error) return res.status(400).send('A autorização do Google Drive foi cancelada ou recusada. Você pode fechar esta página.');
+    const state = jwt.verify(String(req.query.state || ''), process.env.JWT_SECRET, {
+      issuer: 'novelplay-api',
+      audience: 'novelplay-google-drive'
+    });
+    if (state.purpose !== 'google-drive-oauth' || !state.adminId || !req.query.code) {
+      return res.status(400).send('Resposta OAuth inválida. Inicie a conexão novamente pelo painel do NovelPlay.');
+    }
+    const oauth2 = googleOAuthClient();
+    const { tokens } = await oauth2.getToken(String(req.query.code));
+    if (!tokens.refresh_token) {
+      return res.status(400).send('O Google não forneceu um token de atualização. Revogue o acesso do NovelPlay na sua Conta Google e tente conectar novamente.');
+    }
+    const encrypted = encryptGoogleRefreshToken(tokens.refresh_token);
+    await pool.query(
+      `INSERT INTO google_drive_credentials
+         (id, refresh_token_enc, refresh_token_iv, refresh_token_tag, connected_at)
+       VALUES (1, $1, $2, $3, NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         refresh_token_enc = EXCLUDED.refresh_token_enc,
+         refresh_token_iv = EXCLUDED.refresh_token_iv,
+         refresh_token_tag = EXCLUDED.refresh_token_tag,
+         connected_at = NOW()`,
+      [encrypted.encrypted, encrypted.iv, encrypted.tag]
+    );
+    return res.status(200).send('<!doctype html><html lang="pt-br"><meta charset="utf-8"><title>NovelPlay conectado</title><body style="font-family:Arial,sans-serif;padding:32px"><h2>Google Drive conectado ao NovelPlay!</h2><p>Você já pode fechar esta página e voltar ao aplicativo.</p></body></html>');
+  } catch (error) {
+    console.error('Erro no retorno OAuth do Google Drive:', error.message);
+    return res.status(400).send('Não foi possível concluir a conexão com o Google Drive. Verifique a configuração OAuth e tente novamente.');
+  }
+});
+
+app.get('/admin/google-drive/status', authRequired, adminRequired, async (_req, res) => {
+  try {
+    const result = await pool.query('SELECT connected_at FROM google_drive_credentials WHERE id = 1');
+    return res.json({ connected: result.rowCount > 0, connectedAt: result.rows[0]?.connected_at || null });
+  } catch (error) {
+    console.error('Erro ao consultar conexão Google Drive:', error.message);
+    return res.status(500).json({ error: 'Não foi possível consultar a conexão com o Google Drive.' });
+  }
+});
+
+app.get('/admin/google-drive/files', authRequired, adminRequired, async (req, res) => {
+  try {
+    const stored = await pool.query('SELECT refresh_token_enc, refresh_token_iv, refresh_token_tag FROM google_drive_credentials WHERE id = 1');
+    if (!stored.rowCount) return res.status(409).json({ error: 'Google Drive ainda não conectado.' });
+    const oauth2 = googleOAuthClient();
+    oauth2.setCredentials({ refresh_token: decryptGoogleRefreshToken(stored.rows[0]) });
+    const drive = google.drive({ version: 'v3', auth: oauth2 });
+    const pageSize = Math.min(Math.max(Number(req.query.pageSize) || 100, 1), 1000);
+    const pageToken = String(req.query.pageToken || '');
+    const response = await drive.files.list({
+      pageSize,
+      pageToken: pageToken || undefined,
+      q: 'trashed = false',
+      orderBy: 'folder,name',
+      fields: 'nextPageToken,files(id,name,mimeType,mimeType,parents,webViewLink,thumbnailLink,size,modifiedTime)'
+    });
+    return res.json({ files: response.data.files || [], nextPageToken: response.data.nextPageToken || null });
+  } catch (error) {
+    console.error('Erro ao listar arquivos do Google Drive:', error.message);
+    return res.status(502).json({ error: 'Não foi possível listar os arquivos do Google Drive.' });
+  }
+});
 
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'novelplay-api' }));
 
