@@ -4,7 +4,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'download_manager.dart';
 
 /// Opens the official ReelShort website within the NovelPlay application.
-/// Does not access third-party HLS URLs, inject scripts, or bypass subscriptions.
+/// Observes only direct public media URLs; does not access HLS/DRM streams or bypass subscriptions.
 class ReelShortPage extends StatefulWidget {
   final Uri url;
   final String title;
@@ -41,7 +41,7 @@ class _ReelShortPageState extends State<ReelShortPage> {
       function report(value) {
         try {
           if (!value || typeof value !== 'string') return;
-          if (/^https:\/\/[^ ]+\\.(mp4|webm|mov|m4v|mp3|m4a|aac|ogg)(\\?|#|$)/i.test(value)) {
+          if (/^https:\/\/[^ ]+\.(mp4|webm|mov|m4v|mp3|m4a|aac|ogg)(\?|#|$)/i.test(value)) {
             NovelPlayMedia.postMessage(value);
           }
         } catch (_) {}
