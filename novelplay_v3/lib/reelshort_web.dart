@@ -10,6 +10,11 @@ class ReelShortPage extends StatefulWidget {
 
   const ReelShortPage({super.key, required this.url, required this.title});
 
+  static Uri get homeUrl => Uri.https('www.reelshort.com', '/');
+
+  static bool _isAllowedHost(String host) =>
+      host == 'reelshort.com' || host.endsWith('.reelshort.com');
+
   static Uri? movieUrl(String slug, String id) {
     if (!RegExp(r'^[a-z0-9-]+$').hasMatch(slug) ||
         !RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(id)) {
@@ -47,8 +52,11 @@ class _ReelShortPageState extends State<ReelShortPage> {
           },
           onNavigationRequest: (request) {
             final next = Uri.tryParse(request.url);
-            if (next == null ||
-                (next.scheme != 'https' && next.scheme != 'about')) {
+            if (next == null) return NavigationDecision.prevent;
+            if (next.scheme == 'about' && next.path == 'blank') {
+              return NavigationDecision.navigate;
+            }
+            if (next.scheme != 'https' || !_isAllowedHost(next.host)) {
               return NavigationDecision.prevent;
             }
             return NavigationDecision.navigate;
