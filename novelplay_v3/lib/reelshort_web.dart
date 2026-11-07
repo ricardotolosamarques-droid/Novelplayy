@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'download_manager.dart';
 
 /// Opens the official ReelShort website within the NovelPlay application.
 /// Does not access third-party HLS URLs, inject scripts, or bypass subscriptions.
@@ -31,12 +32,45 @@ class _ReelShortPageState extends State<ReelShortPage> {
   late final WebViewController controller;
   int progress = 0;
   String? error;
+  final Set<String> detectedMedia = <String>{};
+
+  static const String _detectorScript = r'''
+    (function () {
+      if (window.__novelPlayDetectorStarted) return;
+      window.__novelPlayDetectorStarted = true;
+      function report(value) {
+        try {
+          if (!value || typeof value !== 'string') return;
+          if (/^https:\/\/[^ ]+\\.(mp4|webm|mov|m4v|mp3|m4a|aac|ogg)(\\?|#|$)/i.test(value)) {
+            NovelPlayMedia.postMessage(value);
+          }
+        } catch (_) {}
+      }
+      function scan() {
+        try {
+          document.querySelectorAll('video, audio, source').forEach(function (node) {
+            report(node.currentSrc || node.src || node.getAttribute('src'));
+          });
+          performance.getEntriesByType('resource').forEach(function (entry) { report(entry.name); });
+        } catch (_) {}
+      }
+      scan();
+      window.setInterval(scan, 1800);
+      document.addEventListener('loadedmetadata', scan, true);
+      document.addEventListener('play', scan, true);
+    })();
+  ''';
 
   @override
   void initState() {
     super.initState();
     controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..addJavaScriptChannel('NovelPlayMedia', onMessageReceived: (message) {
+        final value = message.message.trim();
+        if (!isDirectMediaUrl(value) || detectedMedia.contains(value)) return;
+        if (mounted) setState(() => detectedMedia.add(value));
+      })
       ..setNavigationDelegate(
         NavigationDelegate(
           onProgress: (value) {
@@ -44,6 +78,9 @@ class _ReelShortPageState extends State<ReelShortPage> {
           },
           onPageStarted: (_) {
             if (mounted) setState(() => error = null);
+          },
+          onPageFinished: (_) async {
+            try { await controller.runJavaScript(_detectorScript); } catch (_) {}
           },
           onWebResourceError: (failure) {
             if (failure.isForMainFrame == true && mounted) {
@@ -66,12 +103,77 @@ class _ReelShortPageState extends State<ReelShortPage> {
       ..loadRequest(widget.url);
   }
 
+  Future<void> _showDetected() async {
+    if (detectedMedia.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ainda não foi detectado nenhum arquivo direto compatível.')));
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(sheetContext).size.height * 0.65,
+          child: Column(children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(children: [
+                const Expanded(child: Text('Mídias detectadas', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                Text(detectedMedia.length.toString()),
+              ]),
+            ),
+            const Divider(height: 1),
+            Expanded(child: ListView(children: detectedMedia.map((mediaUrl) {
+              final uri = Uri.parse(mediaUrl);
+              return ListTile(
+                leading: const Icon(Icons.video_file_outlined, color: Color(0xffff6b9d)),
+                title: Text(safeMediaFileName(mediaUrl), maxLines: 1, overflow: TextOverflow.ellipsis),
+                subtitle: Text(uri.host, maxLines: 1, overflow: TextOverflow.ellipsis),
+                trailing: IconButton(
+                  tooltip: 'Adicionar à fila',
+                  icon: const Icon(Icons.add_circle_outline),
+                  onPressed: () async {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (dialogContext) => AlertDialog(
+                        title: const Text('Confirmar autorização'),
+                        content: const Text('Você confirma que tem direito de baixar e guardar este arquivo? O NovelPlay não baixa conteúdo protegido por DRM nem contorna assinaturas.'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+                          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Confirmo')),
+                        ],
+                      ),
+                    );
+                    if (confirmed != true) return;
+                    final added = await DownloadQueue.instance.add(mediaUrl);
+                    if (!sheetContext.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(added ? 'Arquivo adicionado à fila.' : 'Endereço incompatível.')));
+                  },
+                ),
+              );
+            }).toList())),
+          ]),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
         actions: [
+          IconButton(
+            tooltip: 'Mídias detectadas',
+            onPressed: _showDetected,
+            icon: Badge(isLabelVisible: detectedMedia.isNotEmpty, label: Text(detectedMedia.length.toString()), child: const Icon(Icons.radar)),
+          ),
+          IconButton(
+            tooltip: 'Fila de downloads',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DownloadManagerScreen())),
+            icon: const Icon(Icons.download_for_offline_outlined),
+          ),
           IconButton(
             tooltip: 'Copiar link oficial',
             onPressed: () {
@@ -93,12 +195,11 @@ class _ReelShortPageState extends State<ReelShortPage> {
       ),
       body: Column(
         children: [
-          const Padding(
-            padding: EdgeInsets.all(8),
+          Padding(
+            padding: const EdgeInsets.all(8),
             child: Text(
-              'Página oficial ReelShort. A disponibilidade e o acesso '
-              'a episódios premium são controlados pelo ReelShort.',
-              style: TextStyle(fontSize: 12),
+              'Página oficial ReelShort. Arquivos diretos detectados: ' + detectedMedia.length.toString() + '. A disponibilidade e o acesso a episódios premium continuam sob controle do serviço.',
+              style: const TextStyle(fontSize: 12),
             ),
           ),
           if (progress < 100)
