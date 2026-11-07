@@ -71,11 +71,11 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
         .timeout(const Duration(seconds: 45));
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception(data['error'] ?? 'Falha ao importar (HTTP \${response.statusCode}).');
+        throw Exception(data['error'] ?? 'Falha ao importar (HTTP ${response.statusCode}).');
       }
       await prefs.remove(_queueKey);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('\${data['episodeCount'] ?? episodes.length} episódios importados.')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${data['episodeCount'] ?? episodes.length} episódios importados.')));
       Navigator.pop(context, true);
     } catch (error) {
       if (mounted) setState(() => _error = error.toString().replaceFirst('Exception: ', ''));
@@ -97,10 +97,10 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
       const SizedBox(height: 12),
       TextField(controller: _links, minLines: 7, maxLines: 12, decoration: const InputDecoration(labelText: 'Links dos episódios', hintText: 'Um link HTTPS por linha'), onChanged: (_) { _suggestTitle(); setState(() {}); }),
       const SizedBox(height: 8),
-      Text('\${_extractLinks().length} links válidos • numeração automática', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+      Text('${_extractLinks().length} links válidos • numeração automática', style: const TextStyle(color: Colors.white70, fontSize: 12)),
       CheckboxListTile(contentPadding: EdgeInsets.zero, value: _authorized, onChanged: (v) => setState(() => _authorized = v ?? false), title: const Text('Tenho autorização para reproduzir e distribuir estes vídeos.'), controlAffinity: ListTileControlAffinity.leading),
       if (_error != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(_error!, style: const TextStyle(color: Colors.redAccent))),
-      FilledButton.icon(onPressed: _busy ? null : _import, icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.cloud_upload_outlined), label: Text(_busy ? 'Importando...' : 'Importar \${_extractLinks().length} episódios')),
+      FilledButton.icon(onPressed: _busy ? null : _import, icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.cloud_upload_outlined), label: Text(_busy ? 'Importando...' : 'Importar ${_extractLinks().length} episódios')),
     ]),
   );
 }
