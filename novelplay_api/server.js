@@ -10,7 +10,7 @@ const app = express();
 app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors({ origin: true }));
-app.use(express.json({ limit: '20kb' }));
+app.use(express.json({ limit: '2mb' }));
 app.use('/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false }));
 
 const required = ['DATABASE_URL', 'JWT_SECRET', 'ADMIN_PASSWORD'];
