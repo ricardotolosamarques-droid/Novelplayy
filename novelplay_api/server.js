@@ -119,6 +119,31 @@ function authRequired(req, res, next) {
   }
 }
 
+/*
+ * A role gravada no JWT é uma fotografia do momento do login.
+ * Para ações administrativas, confirma-se também a role atual no banco,
+ * impedindo que um token antigo continue com privilégios após uma alteração.
+ */
+async function adminRequired(req, res, next) {
+  try {
+    const result = await pool.query(
+      'SELECT role FROM app_users WHERE id = $1',
+      [req.auth.sub]
+    );
+    if (!result.rowCount) {
+      return res.status(401).json({ error: 'Conta não encontrada. Entre novamente.' });
+    }
+    if (result.rows[0].role !== 'admin') {
+      return res.status(403).json({ error: 'Acesso exclusivo do administrador.' });
+    }
+    req.auth.role = result.rows[0].role;
+    return next();
+  } catch (error) {
+    console.error('Erro ao validar permissão administrativa:', error.message);
+    return res.status(500).json({ error: 'Não foi possível validar a permissão administrativa.' });
+  }
+}
+
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'novelplay-api' }));
 
 app.post('/auth/register', async (req, res) => {
@@ -479,7 +504,7 @@ app.get('/catalog', async (_req, res) => {
   }
 });
 
-app.post('/admin/catalog/series', authRequired, async (req, res) => {
+app.post('/admin/catalog/series', authRequired, adminRequired, async (req, res) => {
   if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Acesso exclusivo do administrador.' });
   const title = String(req.body.title || '').trim();
   const synopsis = String(req.body.synopsis || '').trim();
@@ -500,7 +525,7 @@ app.post('/admin/catalog/series', authRequired, async (req, res) => {
   }
 });
 
-app.post('/admin/catalog/import', authRequired, async (req, res) => {
+app.post('/admin/catalog/import', authRequired, adminRequired, async (req, res) => {
   if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Acesso exclusivo do administrador.' });
   const title = String(req.body.title || '').trim();
   const synopsis = String(req.body.synopsis || '').trim();
@@ -588,7 +613,7 @@ app.post('/admin/catalog/import', authRequired, async (req, res) => {
   }
 });
 
-app.post('/admin/catalog/import-links', authRequired, async (req, res) => {
+app.post('/admin/catalog/import-links', authRequired, adminRequired, async (req, res) => {
   if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Acesso exclusivo do administrador.' });
   const title = String(req.body.title || '').trim();
   const synopsis = String(req.body.synopsis || '').trim();
@@ -647,7 +672,7 @@ app.post('/admin/catalog/import-links', authRequired, async (req, res) => {
   }
 });
 
-app.post('/admin/catalog/series/:seriesId/episodes', authRequired, async (req, res) => {
+app.post('/admin/catalog/series/:seriesId/episodes', authRequired, adminRequired, async (req, res) => {
   if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Acesso exclusivo do administrador.' });
   const seriesId = Number(req.params.seriesId);
   const number = Number(req.body.number);
@@ -677,7 +702,7 @@ app.post('/admin/catalog/series/:seriesId/episodes', authRequired, async (req, r
   }
 });
 
-app.get('/admin/users', authRequired, async (req, res) => {
+app.get('/admin/users', authRequired, adminRequired, async (req, res) => {
   if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Acesso exclusivo do administrador.' });
   try {
     const result = await pool.query(
