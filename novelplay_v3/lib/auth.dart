@@ -90,8 +90,9 @@ class NovelAuth {
 
   static Future<NovelUser> register(String username, String email, String password) async {
     final data = await _request('/auth/register', body: {'username': username, 'email': email, 'password': password});
-    await saveToken(data['token'] as String);
-    return NovelUser.fromJson(data['user'] as Map<String, dynamic>);
+    final user = NovelUser.fromJson(data['user'] as Map<String, dynamic>);
+    await saveSession(data['token'] as String, user);
+    return user;
   }
 
   static Future<List<Map<String, dynamic>>> users() async {
