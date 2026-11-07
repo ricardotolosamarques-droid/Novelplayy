@@ -18,7 +18,20 @@ class DownloadTask {
   static DownloadTask? fromJson(dynamic v) {
     if (v is! Map) return null;
     final u = v['url']?.toString() ?? '', n = v['fileName']?.toString() ?? '';
-    return isDirectMediaUrl(u) && n.isNotEmpty ? DownloadTask(u, n) : null;
+    if (!isDirectMediaUrl(u) || n.isEmpty) return null;
+    final task = DownloadTask(u, n);
+    final savedStatus = v['status']?.toString();
+    if (savedStatus == DownloadStatus.completed.name) {
+      task.status = DownloadStatus.completed;
+      task.localPath = v['localPath']?.toString();
+    } else if (savedStatus == DownloadStatus.failed.name) {
+      task.status = DownloadStatus.failed;
+      task.error = 'Falha na tentativa anterior. Toque para tentar novamente.';
+    } else if (savedStatus == DownloadStatus.cancelled.name) {
+      task.status = DownloadStatus.cancelled;
+    }
+    // Um download que foi interrompido pelo fechamento do app volta para a fila.
+    return task;
   }
 }
 
@@ -125,7 +138,7 @@ class DownloadQueue extends ChangeNotifier {
       final res = await c.send(http.Request('GET', Uri.parse(t.url)));
       if (res.statusCode < 200 || res.statusCode >= 300) throw HttpException('HTTP ' + res.statusCode.toString());
       final type = (res.headers['content-type'] ?? '').toLowerCase();
-      if (type.contains('mpegurl') || type.contains('dash+xml')) throw const FormatException('Manifesto de streaming não é arquivo direto.');
+      if (type.contains('mpegurl') || type.contains('dash+xml') || type.contains('text/html')) throw const FormatException('O servidor não entregou um arquivo de mídia direto.');
       t.total = res.contentLength ?? 0;
       final dir = await getApplicationDocumentsDirectory();
       final folder = Directory(dir.path + '/NovelPlayDownloads');
