@@ -171,6 +171,14 @@ function googleOAuthClient() {
   if (!clientId || !clientSecret || !redirectUri) {
     throw new Error('Configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET e GOOGLE_REDIRECT_URI no Render.');
   }
+  // Diagnóstico sem registrar o segredo nem qualquer parte dele.
+  console.info('Diagnóstico OAuth Google Drive:', JSON.stringify({
+    clientIdMatchesExpected: clientId === '722721665373-773chvkqrls0e0dmt4pqtlmcb5n7o5qr.apps.googleusercontent.com',
+    clientSecretPresent: Boolean(clientSecret),
+    clientSecretHasGoogleFormat: clientSecret.startsWith('GOCSPX-'),
+    clientSecretLength: clientSecret.length,
+    redirectUriMatchesExpected: redirectUri === 'https://novelplay-api-ee5f.onrender.com/google-drive/callback'
+  }));
   return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 }
 
