@@ -36,27 +36,35 @@ jobs:
         working-directory: novelplay_v3
         run: flutter create --platforms=android --org com.example --project-name novelinha_app .
 
-      - name: Enable internet access
+      - name: Configure Android manifest
         working-directory: novelplay_v3
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('android/app/src/main/AndroidManifest.xml')
-          s = p.read_text()
-          permission = '<uses-permission android:name="android.permission.INTERNET" />'
-          if permission not in s:
-              s = s.replace(
-                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
-                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android>\n    ' + permission
-              )
 
-          # O SDK do Google Mobile Ads exige um App ID no AndroidManifest.
-          # Este é o App ID oficial de teste do Google; não é uma credencial de produção.
-          ads_app_id = '<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713" />'
-          if 'com.google.android.gms.ads.APPLICATION_ID' not in s:
-              s = s.replace('<application', '<application\n        ' + ads_app_id, 1)
+          path = Path('android/app/src/main/AndroidManifest.xml')
+          xml = path.read_text()
 
-          p.write_text(s)
+          internet = '<uses-permission android:name="android.permission.INTERNET" />'
+          if internet not in xml:
+              manifest_start = xml.find('<manifest')
+              manifest_end = xml.find('>', manifest_start)
+              if manifest_start < 0 or manifest_end < 0:
+                  raise SystemExit('Tag manifest não encontrada no AndroidManifest.xml')
+              xml = xml[:manifest_end + 1] + '\\n    ' + internet + xml[manifest_end + 1:]
+
+          app_id = '<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713" />'
+          if 'com.google.android.gms.ads.APPLICATION_ID' not in xml:
+              app_start = xml.find('<application')
+              app_end = xml.find('>', app_start)
+              if app_start < 0 or app_end < 0:
+                  raise SystemExit('Tag application não encontrada no AndroidManifest.xml')
+              xml = xml[:app_end + 1] + '\\n        ' + app_id + xml[app_end + 1:]
+
+          import xml.etree.ElementTree as ET
+          ET.fromstring(xml)
+          path.write_text(xml)
+          print('AndroidManifest.xml válido; permissões e App ID configurados.')
           PY
 
       - name: Install dependencies
