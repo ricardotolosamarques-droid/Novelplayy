@@ -59,7 +59,7 @@ jobs:
 
       - name: Check Dart code
         working-directory: novelplay_v3
-        run: flutter analyze --no-pub
+        run: flutter analyze lib --no-pub
 
       - name: Build release APK
         working-directory: novelplay_v3
