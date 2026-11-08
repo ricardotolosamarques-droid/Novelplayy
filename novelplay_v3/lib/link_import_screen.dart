@@ -14,7 +14,7 @@ class LinkImportScreen extends StatefulWidget {
 class _LinkImportScreenState extends State<LinkImportScreen> {
   final _title = TextEditingController(), _synopsis = TextEditingController(), _cover = TextEditingController(), _links = TextEditingController();
   bool _authorized = false, _busy = false, _metadataBusy = false;
-  String? _error, _metadataStatus;
+  String? _error, _metadataStatus, _uploadStatus;
   List<Map<String, dynamic>> _metadataCandidates = [];
   @override
   void initState() { super.initState(); _loadQueue(); }
@@ -113,6 +113,28 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
     _metadataCandidates = [];
   }
 
+  Future<Map<String, dynamic>> _waitForUpload(String token, String jobId) async {
+    final deadline = DateTime.now().add(const Duration(minutes: 30));
+    while (DateTime.now().isBefore(deadline)) {
+      final response = await http.get(
+        Uri.parse('$_api/admin/catalog/import-jobs/$jobId'),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      ).timeout(const Duration(seconds: 20));
+      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(data['error'] ?? 'Não foi possível consultar o envio ao Drive.');
+      }
+      final status = (data['status'] ?? '').toString();
+      final uploaded = data['uploaded'] ?? 0;
+      final failed = data['failed'] ?? 0;
+      final total = data['total'] ?? 0;
+      if (mounted) setState(() => _uploadStatus = 'Enviando para o Drive: ' + (uploaded + failed).toString() + ' de ' + total.toString() + ' episódios processados.');
+      if (status == 'completed' || status == 'completed_with_errors' || status == 'failed') return data;
+      await Future.delayed(const Duration(seconds: 3));
+    }
+    throw Exception('O envio continua no servidor, mas demorou mais que o esperado. Você pode voltar ao catálogo; a transferência continuará em segundo plano.');
+  }
+
   Future<void> _import() async {
     final links = _extractLinks();
     if (_title.text.trim().isEmpty) { setState(() => _error = 'Informe o nome da novelinha.'); return; }
@@ -125,7 +147,7 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
       while (!used.add(number)) { number++; }
       episodes.add({'number': number, 'title': 'Episódio $number', 'videoUrl': links[i].toString()});
     }
-    setState(() { _busy = true; _error = null; });
+    setState(() { _busy = true; _error = null; _uploadStatus = 'Preparando os episódios para envio...'; });
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString(_tokenKey);
@@ -135,17 +157,26 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
         body: jsonEncode({'title': _title.text.trim(), 'synopsis': _synopsis.text.trim(),
           'coverUrl': _cover.text.trim(), 'authorizedPlayback': true, 'episodes': episodes}))
         .timeout(const Duration(seconds: 45));
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception(data['error'] ?? 'Falha ao importar (HTTP ${response.statusCode}).');
+        throw Exception(data['error'] ?? 'Falha ao iniciar importação (HTTP ' + response.statusCode.toString() + ').');
       }
+      final jobId = (data['jobId'] ?? '').toString();
+      if (jobId.isEmpty) throw Exception('O servidor não retornou o identificador do envio ao Drive.');
+      final result = await _waitForUpload(token, jobId);
       await prefs.remove(_queueKey);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${data['episodeCount'] ?? episodes.length} episódios importados.')));
+      final uploaded = result['uploaded'] ?? 0;
+      final failed = result['failed'] ?? 0;
+      final total = result['total'] ?? episodes.length;
+      final message = failed == 0
+        ? uploaded.toString() + ' de ' + total.toString() + ' episódios salvos no Google Drive.'
+        : uploaded.toString() + ' de ' + total.toString() + ' salvos no Drive; ' + failed.toString() + ' falharam. Verifique se os links são downloads diretos e não exigem login.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 6)));
       Navigator.pop(context, true);
     } catch (error) {
       if (mounted) setState(() => _error = error.toString().replaceFirst('Exception: ', ''));
-    } finally { if (mounted) setState(() => _busy = false); }
+    } finally { if (mounted) setState(() { _busy = false; _uploadStatus = null; }); }
   }
   @override
   void dispose() { _title.dispose(); _synopsis.dispose(); _cover.dispose(); _links.dispose(); super.dispose(); }
@@ -182,8 +213,9 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
       const SizedBox(height: 8),
       Text('${_extractLinks().length} links válidos • numeração automática', style: const TextStyle(color: Colors.white70, fontSize: 12)),
       CheckboxListTile(contentPadding: EdgeInsets.zero, value: _authorized, onChanged: (v) => setState(() => _authorized = v ?? false), title: const Text('Tenho autorização para reproduzir e distribuir estes vídeos.'), controlAffinity: ListTileControlAffinity.leading),
+      if (_uploadStatus != null) Padding(padding: const EdgeInsets.only(bottom: 10), child: Text(_uploadStatus!, style: const TextStyle(color: Colors.white70))),
       if (_error != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(_error!, style: const TextStyle(color: Colors.redAccent))),
-      FilledButton.icon(onPressed: _busy ? null : _import, icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.cloud_upload_outlined), label: Text(_busy ? 'Publicando...' : 'Confirmar e publicar ${_extractLinks().length} episódios')),
+      FilledButton.icon(onPressed: _busy ? null : _import, icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.cloud_upload_outlined), label: Text(_busy ? 'Enviando para o Google Drive...' : 'Enviar ${_extractLinks().length} episódios para o Drive')),
     ]),
   );
 }
