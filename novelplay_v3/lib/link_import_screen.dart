@@ -161,6 +161,17 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception(data['error'] ?? 'Falha ao iniciar importação (HTTP ' + response.statusCode.toString() + ').');
       }
+      final duplicateCount = (data['duplicateCount'] as num?)?.toInt() ?? 0;
+      if (data['duplicateOnly'] == true) {
+        await prefs.remove(_queueKey);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('$duplicateCount link(s) já estavam cadastrados. Nenhum episódio foi enviado novamente.'),
+          duration: const Duration(seconds: 6),
+        ));
+        Navigator.pop(context, true);
+        return;
+      }
       final jobId = (data['jobId'] ?? '').toString();
       if (jobId.isEmpty) throw Exception('O servidor não retornou o identificador do envio ao Drive.');
       final result = await _waitForUpload(token, jobId);
@@ -169,10 +180,11 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
       final uploaded = result['uploaded'] ?? 0;
       final failed = result['failed'] ?? 0;
       final total = result['total'] ?? episodes.length;
-      final message = failed == 0
+      final duplicateMessage = duplicateCount > 0 ? ' $duplicateCount link(s) repetido(s) foram ignorados.' : '';
+      final message = (failed == 0
         ? uploaded.toString() + ' de ' + total.toString() + ' episódios salvos no Google Drive.'
-        : uploaded.toString() + ' de ' + total.toString() + ' salvos no Drive; ' + failed.toString() + ' falharam. Verifique se os links são downloads diretos e não exigem login.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 6)));
+        : uploaded.toString() + ' de ' + total.toString() + ' salvos no Drive; ' + failed.toString() + ' falharam. Verifique se os links são downloads diretos e não exigem login.') + duplicateMessage;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 7)));
       Navigator.pop(context, true);
     } catch (error) {
       if (mounted) setState(() => _error = error.toString().replaceFirst('Exception: ', ''));
