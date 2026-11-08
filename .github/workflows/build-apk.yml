@@ -1,55 +1,74 @@
-
 name: Build NovelPlay APK
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'novelplay_v3/**'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
+    timeout-minutes: 45
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+          cache-dependency-path: novelplay_v3/pubspec.lock
 
-      - name: Extract project
-        run: |
-          unzip -q novelplay_flutter_v1.zip -d extracted
+      - name: Generate Android project files
+        working-directory: novelplay_v3
+        run: flutter create --platforms=android --org com.example --project-name novelinha_app .
 
-      - name: Generate Android project
-        working-directory: extracted/novelplay_flutter
-        run: flutter create --platforms=android --project-name novelplay .
-
-      - name: Enable Internet
+      - name: Enable internet access
+        working-directory: novelplay_v3
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('extracted/novelplay_flutter/android/app/src/main/AndroidManifest.xml')
+          p = Path('android/app/src/main/AndroidManifest.xml')
           s = p.read_text()
-          s = s.replace(
-              '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
-              '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.INTERNET" />'
-          )
+          permission = '<uses-permission android:name="android.permission.INTERNET" />'
+          if permission not in s:
+              s = s.replace(
+                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
+                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\\n    ' + permission
+              )
           p.write_text(s)
           PY
 
       - name: Install dependencies
-        working-directory: extracted/novelplay_flutter
+        working-directory: novelplay_v3
         run: flutter pub get
 
-      - name: Build APK
-        working-directory: extracted/novelplay_flutter
+      - name: Check Dart code
+        working-directory: novelplay_v3
+        run: flutter analyze --no-pub
+
+      - name: Build release APK
+        working-directory: novelplay_v3
         run: flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: NovelPlay-APK
-          path: extracted/novelplay_flutter/build/app/outputs/flutter-apk/app-release.apk
+          name: NovelPlay-v3-APK
+          path: novelplay_v3/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
