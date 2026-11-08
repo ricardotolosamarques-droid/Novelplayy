@@ -1071,8 +1071,8 @@ app.get('/admin/users', authRequired, adminRequired, async (req, res) => {
 const port = Number(process.env.PORT || 3000);
 initializeDatabase()
   .then(async () => {
-    await pool.query(\"UPDATE catalog_drive_upload_jobs SET status = 'queued' WHERE status = 'running'\");
-    await pool.query(\"UPDATE catalog_episodes SET drive_upload_status = 'queued' WHERE drive_upload_status = 'uploading'\");
+    await pool.query("UPDATE catalog_drive_upload_jobs SET status = 'queued' WHERE status = 'running'");
+    await pool.query("UPDATE catalog_episodes SET drive_upload_status = 'queued' WHERE drive_upload_status = 'uploading'");
     app.listen(port, '0.0.0.0', () => console.log(`NovelPlay API ativa na porta ${port}`));
     const pendingJobs = await pool.query(\"SELECT id FROM catalog_drive_upload_jobs WHERE status = 'queued' ORDER BY created_at\");
     for (const job of pendingJobs.rows) setImmediate(() => processDriveUploadJob(job.id));
