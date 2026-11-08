@@ -187,10 +187,39 @@ class _AuthGateState extends State<AuthGate> {
     if (incoming.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
     final previous = prefs.getString(_pendingLinksKey) ?? '';
-    final lines = <String>{...previous.split(RegExp(r'\s+')), ...incoming.split(RegExp(r'\s+'))}
-      ..removeWhere((item) => item.trim().isEmpty);
-    await prefs.setString(_pendingLinksKey, lines.join('\n'));
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Links recebidos. Abra Importar do 1DM para revisar os episódios.')));
+    final existing = previous.split(RegExp(r'\\s+'))
+      .where((item) => item.trim().isNotEmpty).toList();
+    String keyFor(String item) {
+      final uri = Uri.tryParse(item.trim());
+      if (uri == null || !uri.hasScheme || uri.host.isEmpty) return item.trim();
+      return uri.replace(fragment: '').toString();
+    }
+    final known = existing.map(keyFor).toSet();
+    final added = <String>[];
+    var duplicates = 0;
+    for (final item in incoming.split(RegExp(r'\\s+'))) {
+      final candidate = item.trim();
+      if (candidate.isEmpty) continue;
+      if (!known.add(keyFor(candidate))) {
+        duplicates++;
+      } else {
+        added.add(candidate);
+      }
+    }
+    if (added.isNotEmpty) {
+      await prefs.setString(_pendingLinksKey, [...existing, ...added].join('\\n'));
+    }
+    if (mounted) {
+      final message = added.isEmpty
+        ? 'Este link já está cadastrado na lista de episódios.'
+        : duplicates > 0
+          ? '${added.length} link(s) adicionado(s). ${duplicates} repetido(s) já estavam na lista.'
+          : 'Links recebidos. Abra Importar do 1DM para revisar os episódios.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 5),
+      ));
+    }
   }
   Future<void> _restore() async {
     final restored = await NovelAuth.restore();
