@@ -96,6 +96,7 @@ async function initializeDatabase() {
   await pool.query('ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS source_episode_id TEXT NOT NULL DEFAULT \'\'');
   await pool.query('ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS source_is_free BOOLEAN');
   await pool.query('ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_file_id TEXT');
+  await pool.query('ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_upload_job_id UUID');
   await pool.query('ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_web_view_link TEXT');
   await pool.query("ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_upload_status TEXT NOT NULL DEFAULT 'not_started'");
   await pool.query("ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_upload_error TEXT NOT NULL DEFAULT ''");
@@ -324,8 +325,8 @@ async function processDriveUploadJob(jobId) {
     const rootFolder = await findOrCreateDriveFolder(drive, 'NovelPlay', null);
     const seriesFolder = await findOrCreateDriveFolder(drive, seriesResult.rows[0].title, rootFolder);
     const episodes = await pool.query(
-      "SELECT id, episode_number, video_url FROM catalog_episodes WHERE series_id = $1 AND drive_upload_status = 'queued' ORDER BY episode_number",
-      [job.series_id]
+      "SELECT id, episode_number, video_url FROM catalog_episodes WHERE drive_upload_job_id = $1 AND drive_upload_status = 'queued' ORDER BY episode_number",
+      [jobId]
     );
     for (const episode of episodes.rows) {
       await pool.query("UPDATE catalog_episodes SET drive_upload_status = 'uploading', drive_upload_error = '' WHERE id = $1", [episode.id]);
@@ -344,8 +345,8 @@ async function processDriveUploadJob(jobId) {
       }
     }
     const counts = await pool.query(
-      "SELECT COUNT(*) FILTER (WHERE drive_upload_status = 'uploaded')::int AS uploaded, COUNT(*) FILTER (WHERE drive_upload_status = 'failed')::int AS failed FROM catalog_episodes WHERE series_id = $1",
-      [job.series_id]
+      "SELECT COUNT(*) FILTER (WHERE drive_upload_status = 'uploaded')::int AS uploaded, COUNT(*) FILTER (WHERE drive_upload_status = 'failed')::int AS failed FROM catalog_episodes WHERE drive_upload_job_id = $1",
+      [jobId]
     );
     const uploaded = counts.rows[0].uploaded;
     const failed = counts.rows[0].failed;
@@ -357,7 +358,7 @@ async function processDriveUploadJob(jobId) {
     console.error('Erro ao processar envio ao Google Drive:', error.message);
     await pool.query("UPDATE catalog_drive_upload_jobs SET status = 'failed', updated_at = NOW() WHERE id = $1", [jobId]).catch(() => {});
     await pool.query(
-      "UPDATE catalog_episodes SET drive_upload_status = 'failed', drive_upload_error = $2 WHERE series_id = (SELECT series_id FROM catalog_drive_upload_jobs WHERE id = $1) AND drive_upload_status IN ('queued', 'uploading')",
+      "UPDATE catalog_episodes SET drive_upload_status = 'failed', drive_upload_error = $2 WHERE drive_upload_job_id = $1 AND drive_upload_status IN ('queued', 'uploading')",
       [jobId, String(error.message || 'Falha no envio ao Drive').slice(0, 500)]
     ).catch(() => {});
   }
@@ -375,7 +376,7 @@ app.get('/admin/google-drive/connect', authRequired, adminRequired, googleDriveL
       access_type: 'offline',
       prompt: 'consent',
       include_granted_scopes: true,
-      scope: ['https://www.googleapis.com/auth/drive.file'],
+      scope: ['https://www.googleapis.com/auth/drive'],
       state
     });
     return res.json({ authorizationUrl });
@@ -960,8 +961,8 @@ app.post('/admin/catalog/import-links', authRequired, adminRequired, async (req,
     const seriesId = seriesResult.rows[0].id;
     for (const episode of normalized) {
       await client.query(
-        "INSERT INTO catalog_episodes (series_id, episode_number, title, video_url, drive_upload_status, drive_upload_error) VALUES ($1, $2, $3, $4, 'queued', '') ON CONFLICT (series_id, episode_number) DO UPDATE SET title = EXCLUDED.title, video_url = EXCLUDED.video_url, drive_file_id = NULL, drive_web_view_link = NULL, drive_upload_status = 'queued', drive_upload_error = ''",
-        [seriesId, episode.number, episode.title, episode.videoUrl]
+        "INSERT INTO catalog_episodes (series_id, episode_number, title, video_url, drive_upload_status, drive_upload_error, drive_upload_job_id) VALUES ($1, $2, $3, $4, 'queued', '', $5) ON CONFLICT (series_id, episode_number) DO UPDATE SET title = EXCLUDED.title, video_url = EXCLUDED.video_url, drive_file_id = NULL, drive_web_view_link = NULL, drive_upload_status = 'queued', drive_upload_error = '', drive_upload_job_id = EXCLUDED.drive_upload_job_id",
+        [seriesId, episode.number, episode.title, episode.videoUrl, jobId]
       );
     }
     await client.query(
@@ -1069,7 +1070,13 @@ app.get('/admin/users', authRequired, adminRequired, async (req, res) => {
 
 const port = Number(process.env.PORT || 3000);
 initializeDatabase()
-  .then(() => app.listen(port, '0.0.0.0', () => console.log(`NovelPlay API ativa na porta ${port}`)))
+  .then(async () => {
+    await pool.query(\"UPDATE catalog_drive_upload_jobs SET status = 'queued' WHERE status = 'running'\");
+    await pool.query(\"UPDATE catalog_episodes SET drive_upload_status = 'queued' WHERE drive_upload_status = 'uploading'\");
+    app.listen(port, '0.0.0.0', () => console.log(`NovelPlay API ativa na porta ${port}`));
+    const pendingJobs = await pool.query(\"SELECT id FROM catalog_drive_upload_jobs WHERE status = 'queued' ORDER BY created_at\");
+    for (const job of pendingJobs.rows) setImmediate(() => processDriveUploadJob(job.id));
+  })
   .catch(error => {
     console.error('Falha ao inicializar banco:', error.message);
     process.exit(1);
