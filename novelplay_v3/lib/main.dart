@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'catalog.dart';
 import 'dramabos_screen.dart';
@@ -6,9 +9,92 @@ import 'dramabos_ui.dart';
 import 'drive_screen.dart';
 import 'auth.dart';
 
+final ValueNotifier<String?> _diagnosticError = ValueNotifier<String?>(null);
+
+void _captureError(Object error, StackTrace stack) {
+  final report = 'ERRO CAPTURADO PELO NOVELPLAY\\n'
+      'Tipo: ${error.runtimeType}\\n'
+      'Mensagem: $error\\n\\n'
+      'Pilha técnica:\\n$stack';
+  debugPrint(report);
+  _diagnosticError.value = report;
+}
+
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  runApp(const NovelPlay());
+  runZonedGuarded(() {
+    WidgetsFlutterBinding.ensureInitialized();
+    FlutterError.onError = (details) {
+      _captureError(details.exception, details.stack ?? StackTrace.current);
+    };
+    ui.PlatformDispatcher.instance.onError = (error, stack) {
+      _captureError(error, stack);
+      return true;
+    };
+    runApp(const NovelPlay());
+  }, _captureError);
+}
+
+class NovelPlayDiagnosticScreen extends StatelessWidget {
+  final String report;
+  const NovelPlayDiagnosticScreen({super.key, required this.report});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: const Color(0xff101018),
+        appBar: AppBar(title: const Text('Diagnóstico do NovelPlay')),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Icon(Icons.bug_report_outlined,
+                    color: Colors.orangeAccent, size: 48),
+                const SizedBox(height: 12),
+                const Text(
+                  'O aplicativo encontrou um erro e conseguiu registrar os detalhes.',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 14),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xff1b1b27),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        report,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () => Clipboard.setData(
+                    ClipboardData(text: report),
+                  ),
+                  icon: const Icon(Icons.copy),
+                  label: const Text('Copiar erro'),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Se esta tela aparecer, não precisa enviar arquivo: basta me dizer o tipo e a mensagem do erro.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 }
 
 class NovelPlay extends StatelessWidget {
@@ -55,6 +141,12 @@ class NovelPlay extends StatelessWidget {
               borderSide: BorderSide.none,
             ),
           ),
+        ),
+        builder: (context, child) => ValueListenableBuilder<String?>(
+          valueListenable: _diagnosticError,
+          builder: (context, report, _) => report == null
+              ? (child ?? const SizedBox.shrink())
+              : NovelPlayDiagnosticScreen(report: report),
         ),
         home: const AuthGate(),
       );
