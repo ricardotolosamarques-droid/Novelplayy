@@ -382,7 +382,7 @@ class _GoogleDriveAdminScreenState extends State<GoogleDriveAdminScreen> {
         label: const Text('Verificar conexão'),
       ),
       const SizedBox(height: 18),
-      const Text('Ao tocar em Conectar, o Google abrirá uma página para você escolher a conta e autorizar o acesso de leitura ao Drive. Depois, volte ao app e toque em Verificar conexão.',
+      const Text('Ao tocar em Reconectar, o Google abrirá uma página para você autorizar o NovelPlay a consultar pastas e enviar vídeos ao Drive. Depois, volte ao app e toque em Verificar conexão.',
         textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, height: 1.4)),
     ],
   );
