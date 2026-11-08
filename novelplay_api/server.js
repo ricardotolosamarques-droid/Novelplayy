@@ -933,25 +933,44 @@ app.post('/admin/catalog/import-links', authRequired, adminRequired, async (req,
   if (coverUrl && (!isHttpsUrl(coverUrl) || coverUrl.length > 2000)) return res.status(400).json({ error: 'A capa precisa ser uma URL HTTPS válida.' });
   if (episodes.length < 1 || episodes.length > 500) return res.status(400).json({ error: 'Envie de 1 a 500 episódios por importação.' });
   const normalized = [];
-  const seen = new Set();
+  const seenNumbers = new Set();
+  const seenUrls = new Set();
+  let duplicateCount = 0;
   for (const item of episodes) {
     const number = Number(item && item.number);
     const episodeTitle = String(item && item.title || '').trim();
     const videoUrl = String(item && item.videoUrl || '').trim();
     if (!Number.isSafeInteger(number) || number < 1 || number > 100000 ||
         !episodeTitle || episodeTitle.length > 180 || !isHttpsUrl(videoUrl) ||
-        videoUrl.length > 8000 || seen.has(number)) {
+        videoUrl.length > 8000 || seenNumbers.has(number)) {
       return res.status(400).json({ error: 'A lista contém um episódio inválido, link inseguro ou número repetido.' });
     }
-    seen.add(number);
-    normalized.push({ number: number, title: episodeTitle, videoUrl: videoUrl });
+    seenNumbers.add(number);
+    let urlKey;
+    try {
+      const parsed = new URL(videoUrl);
+      parsed.hash = '';
+      urlKey = parsed.toString();
+    } catch (_) {
+      return res.status(400).json({ error: 'Um dos links informados é inválido.' });
+    }
+    if (seenUrls.has(urlKey)) {
+      duplicateCount++;
+      continue;
+    }
+    seenUrls.add(urlKey);
+    normalized.push({ number: number, title: episodeTitle, videoUrl: videoUrl, urlKey: urlKey });
   }
   normalized.sort((a, b) => a.number - b.number);
+  if (!normalized.length) {
+    return res.status(200).json({ imported: false, duplicateOnly: true, duplicateCount: duplicateCount, episodeCount: 0 });
+  }
   const connected = await pool.query('SELECT id FROM google_drive_credentials WHERE id = 1');
   if (!connected.rowCount) return res.status(409).json({ error: 'Conecte o Google Drive antes de importar os episódios.' });
   const jobId = crypto.randomUUID();
   const client = await pool.connect();
   let series;
+  let newEpisodes = [];
   try {
     await client.query('BEGIN');
     const seriesResult = await client.query(
@@ -959,7 +978,26 @@ app.post('/admin/catalog/import-links', authRequired, adminRequired, async (req,
       [title, synopsis, coverUrl]
     );
     const seriesId = seriesResult.rows[0].id;
-    for (const episode of normalized) {
+    const existing = await client.query(
+      'SELECT video_url FROM catalog_episodes WHERE video_url = ANY($1::text[])',
+      [normalized.map(e => e.videoUrl)]
+    );
+    const existingKeys = new Set(existing.rows.map(row => {
+      try { const parsed = new URL(row.video_url); parsed.hash = ''; return parsed.toString(); }
+      catch (_) { return row.video_url; }
+    }));
+    newEpisodes = normalized.filter(episode => {
+      if (existingKeys.has(episode.urlKey)) { duplicateCount++; return false; }
+      return true;
+    });
+    if (!newEpisodes.length) {
+      await client.query('COMMIT');
+      return res.status(200).json({
+        imported: false, duplicateOnly: true, duplicateCount: duplicateCount,
+        episodeCount: 0, series: { id: String(seriesId), title: seriesResult.rows[0].title }
+      });
+    }
+    for (const episode of newEpisodes) {
       await client.query(
         "INSERT INTO catalog_episodes (series_id, episode_number, title, video_url, drive_upload_status, drive_upload_error, drive_upload_job_id) VALUES ($1, $2, $3, $4, 'queued', '', $5) ON CONFLICT (series_id, episode_number) DO UPDATE SET title = EXCLUDED.title, video_url = EXCLUDED.video_url, drive_file_id = NULL, drive_web_view_link = NULL, drive_upload_status = 'queued', drive_upload_error = '', drive_upload_job_id = EXCLUDED.drive_upload_job_id",
         [seriesId, episode.number, episode.title, episode.videoUrl, jobId]
@@ -967,7 +1005,7 @@ app.post('/admin/catalog/import-links', authRequired, adminRequired, async (req,
     }
     await client.query(
       "INSERT INTO catalog_drive_upload_jobs (id, series_id, status, total_episodes) VALUES ($1, $2, 'queued', $3)",
-      [jobId, seriesId, normalized.length]
+      [jobId, seriesId, newEpisodes.length]
     );
     await client.query('COMMIT');
     series = { id: String(seriesId), title: seriesResult.rows[0].title };
@@ -978,7 +1016,11 @@ app.post('/admin/catalog/import-links', authRequired, adminRequired, async (req,
   } finally {
     client.release();
   }
-  res.status(202).json({ imported: true, jobId: jobId, series: series, episodeCount: normalized.length, uploadStatus: 'queued' });
+  res.status(202).json({
+    imported: true, jobId: jobId, series: series,
+    episodeCount: newEpisodes.length, duplicateCount: duplicateCount,
+    uploadStatus: 'queued'
+  });
   setImmediate(() => processDriveUploadJob(jobId));
 });
 
