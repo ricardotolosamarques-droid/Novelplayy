@@ -164,11 +164,14 @@ async function adminRequired(req, res, next) {
 const googleDriveLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false });
 
 function googleOAuthClient() {
-  const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI } = process.env;
-  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI) {
+  // Remove espaços acidentais copiados no painel de variáveis do Render.
+  const clientId = (process.env.GOOGLE_CLIENT_ID || '').trim();
+  const clientSecret = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
+  const redirectUri = (process.env.GOOGLE_REDIRECT_URI || '').trim();
+  if (!clientId || !clientSecret || !redirectUri) {
     throw new Error('Configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET e GOOGLE_REDIRECT_URI no Render.');
   }
-  return new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI);
+  return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 }
 
 function googleTokenKey() {
