@@ -167,6 +167,7 @@ class _AuthGateState extends State<AuthGate> {
   static const String _pendingLinksKey = 'novelplay_pending_shared_links';
   NovelUser? user;
   bool loading = true;
+  Future<void> _shareSaveQueue = Future<void>.value();
   @override
   void initState() {
     super.initState();
@@ -182,22 +183,37 @@ class _AuthGateState extends State<AuthGate> {
       if (value != null) await _saveSharedText(value);
     } catch (_) {}
   }
-  Future<void> _saveSharedText(dynamic value) async {
+  Future<void> _saveSharedText(dynamic value) {
     final incoming = (value ?? '').toString().trim();
-    if (incoming.isEmpty) return;
+    if (incoming.isEmpty) return Future<void>.value();
+    // Serialize incoming share intents so two quick shares cannot overwrite each other.
+    _shareSaveQueue = _shareSaveQueue
+        .catchError((_) {})
+        .then((_) => _saveSharedTextNow(incoming));
+    return _shareSaveQueue;
+  }
+
+  Future<void> _saveSharedTextNow(String incoming) async {
     final prefs = await SharedPreferences.getInstance();
     final previous = prefs.getString(_pendingLinksKey) ?? '';
-    final existing = previous.split(RegExp(r'\\s+'))
-      .where((item) => item.trim().isNotEmpty).toList();
+    // Also split legacy values written with a literal "\n" by the previous version.
+    final existing = previous
+        .split(RegExp(r'\\n|\s+'))
+        .where((item) => item.trim().isNotEmpty)
+        .toList();
+
     String keyFor(String item) {
       final uri = Uri.tryParse(item.trim());
-      if (uri == null || !uri.hasScheme || uri.host.isEmpty) return item.trim();
+      if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+        return item.trim();
+      }
       return uri.replace(fragment: '').toString();
     }
+
     final known = existing.map(keyFor).toSet();
     final added = <String>[];
     var duplicates = 0;
-    for (final item in incoming.split(RegExp(r'\\s+'))) {
+    for (final item in incoming.split(RegExp(r'\s+'))) {
       final candidate = item.trim();
       if (candidate.isEmpty) continue;
       if (!known.add(keyFor(candidate))) {
@@ -206,21 +222,24 @@ class _AuthGateState extends State<AuthGate> {
         added.add(candidate);
       }
     }
+
     if (added.isNotEmpty) {
-      await prefs.setString(_pendingLinksKey, [...existing, ...added].join('\\n'));
+      await prefs.setString(_pendingLinksKey, [...existing, ...added].join('\n'));
     }
+
     if (mounted) {
       final message = added.isEmpty
-        ? 'Este link já está cadastrado na lista de episódios.'
-        : duplicates > 0
-          ? '${added.length} link(s) adicionado(s). ${duplicates} repetido(s) já estavam na lista.'
-          : 'Links recebidos. Abra Importar do 1DM para revisar os episódios.';
+          ? 'Este link já está cadastrado na lista de episódios.'
+          : duplicates > 0
+              ? '\${added.length} link(s) adicionado(s). \$duplicates repetido(s) já estavam na lista.'
+              : 'Links recebidos. Abra Importar do 1DM para revisar os episódios.';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(message),
         duration: const Duration(seconds: 5),
       ));
     }
   }
+
   Future<void> _restore() async {
     final restored = await NovelAuth.restore();
     if (!mounted) return;
