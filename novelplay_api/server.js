@@ -979,7 +979,7 @@ app.post('/admin/catalog/import-links', authRequired, adminRequired, async (req,
     );
     const seriesId = seriesResult.rows[0].id;
     const existing = await client.query(
-      'SELECT video_url FROM catalog_episodes WHERE video_url = ANY($1::text[])',
+      "SELECT video_url FROM catalog_episodes WHERE split_part(video_url, '#', 1) = ANY($1::text[])",
       [normalized.map(e => e.videoUrl)]
     );
     const existingKeys = new Set(existing.rows.map(row => {
