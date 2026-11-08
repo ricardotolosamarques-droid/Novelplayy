@@ -6,6 +6,9 @@ const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
+const dns = require('dns').promises;
+const net = require('net');
+const { Readable } = require('stream');
 const { google } = require('googleapis');
 
 const app = express();
@@ -92,6 +95,11 @@ async function initializeDatabase() {
   await pool.query('ALTER TABLE catalog_episodes ALTER COLUMN video_url DROP NOT NULL');
   await pool.query('ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS source_episode_id TEXT NOT NULL DEFAULT \'\'');
   await pool.query('ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS source_is_free BOOLEAN');
+  await pool.query('ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_file_id TEXT');
+  await pool.query('ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_web_view_link TEXT');
+  await pool.query("ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_upload_status TEXT NOT NULL DEFAULT 'not_started'");
+  await pool.query("ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_upload_error TEXT NOT NULL DEFAULT ''");
+  await pool.query('CREATE TABLE IF NOT EXISTS catalog_drive_upload_jobs (id UUID PRIMARY KEY, series_id BIGINT NOT NULL REFERENCES catalog_series(id) ON DELETE CASCADE, status VARCHAR(32) NOT NULL DEFAULT \'queued\', total_episodes INTEGER NOT NULL DEFAULT 0, completed_episodes INTEGER NOT NULL DEFAULT 0, failed_episodes INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');
 
   const adminUsername = (process.env.ADMIN_USERNAME || 'Admin').trim();
   const adminEmail = (process.env.ADMIN_EMAIL || 'admin@novelplay.local').trim().toLowerCase();
@@ -202,6 +210,159 @@ function decryptGoogleRefreshToken(row) {
   ]).toString('utf8');
 }
 
+function isPrivateAddress(address) {
+  const ip = address.toLowerCase().split('%')[0];
+  if (net.isIP(ip) === 4) {
+    const p = ip.split('.').map(Number);
+    return p[0] === 0 || p[0] === 10 || p[0] === 127 ||
+      (p[0] === 100 && p[1] >= 64 && p[1] <= 127) ||
+      (p[0] === 169 && p[1] === 254) ||
+      (p[0] === 172 && p[1] >= 16 && p[1] <= 31) ||
+      (p[0] === 192 && p[1] === 168) ||
+      (p[0] === 198 && (p[1] === 18 || p[1] === 19)) || p[0] >= 224;
+  }
+  if (net.isIP(ip) === 6) {
+    if (ip === '::' || ip === '::1' || /^f[cd]/.test(ip) ||
+        /^fe[89ab]/.test(ip) || /^ff/.test(ip)) return true;
+    if (ip.startsWith('::ffff:')) return isPrivateAddress(ip.slice(7));
+  }
+  return false;
+}
+
+async function assertPublicHttpsUrl(value) {
+  const url = new URL(value);
+  if (url.protocol !== 'https:' || url.username || url.password) {
+    throw new Error('O link precisa ser HTTPS público e não pode conter credenciais.');
+  }
+  let host = url.hostname.toLowerCase();
+  if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
+  if (!host || host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) {
+    throw new Error('O endereço do vídeo não é público.');
+  }
+  const addresses = net.isIP(host) ? [{ address: host }] : await dns.lookup(host, { all: true, verbatim: true });
+  if (!addresses.length || addresses.some(item => isPrivateAddress(item.address))) {
+    throw new Error('O endereço do vídeo não pode apontar para uma rede privada.');
+  }
+  return url;
+}
+
+async function googleDriveClient() {
+  const stored = await pool.query('SELECT refresh_token_enc, refresh_token_iv, refresh_token_tag FROM google_drive_credentials WHERE id = 1');
+  if (!stored.rowCount) throw new Error('Conecte o Google Drive antes de importar episódios.');
+  const oauth2 = googleOAuthClient();
+  oauth2.setCredentials({ refresh_token: decryptGoogleRefreshToken(stored.rows[0]) });
+  return google.drive({ version: 'v3', auth: oauth2 });
+}
+
+async function findOrCreateDriveFolder(drive, name, parentId) {
+  const escaped = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const parentClause = parentId ? "'" + parentId + "' in parents and " : '';
+  const found = await drive.files.list({
+    q: parentClause + "name = '" + escaped + "' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+    pageSize: 10,
+    fields: 'files(id,name)'
+  });
+  if (found.data.files && found.data.files.length) return found.data.files[0].id;
+  const body = { name: name, mimeType: 'application/vnd.google-apps.folder' };
+  if (parentId) body.parents = [parentId];
+  const created = await drive.files.create({ requestBody: body, fields: 'id,name' });
+  return created.data.id;
+}
+
+async function downloadAndUploadEpisode(drive, sourceUrl, folderId, number) {
+  let current = new URL(sourceUrl);
+  let response;
+  for (let redirects = 0; redirects <= 5; redirects++) {
+    await assertPublicHttpsUrl(current.toString());
+    response = await fetch(current, {
+      redirect: 'manual',
+      headers: { 'User-Agent': 'NovelPlay/1.0 authorized media transfer', 'Accept': 'video/*,application/octet-stream,*/*' },
+      signal: AbortSignal.timeout(30 * 60 * 1000)
+    });
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      const location = response.headers.get('location');
+      if (!location) throw new Error('O servidor do vídeo redirecionou sem informar o destino.');
+      current = new URL(location, current);
+      continue;
+    }
+    break;
+  }
+  if (!response || [301, 302, 303, 307, 308].includes(response.status)) {
+    throw new Error('O link excedeu o limite de redirecionamentos.');
+  }
+  if (!response.ok || !response.body) throw new Error('Não foi possível baixar o vídeo (HTTP ' + response.status + ').');
+  const mimeType = (response.headers.get('content-type') || 'application/octet-stream').split(';')[0].trim();
+  if (mimeType === 'text/html' || mimeType.includes('json') || mimeType.startsWith('text/')) {
+    await response.body.cancel().catch(() => {});
+    throw new Error('O link não retornou um arquivo de vídeo direto. Use um link de download válido.');
+  }
+  const length = Number(response.headers.get('content-length') || 0);
+  if (length > 2 * 1024 * 1024 * 1024) {
+    await response.body.cancel().catch(() => {});
+    throw new Error('O vídeo ultrapassa o limite de 2 GB por episódio.');
+  }
+  const fileName = 'Episódio ' + String(number).padStart(3, '0') + '.mp4';
+  const uploaded = await drive.files.create({
+    requestBody: { name: fileName, mimeType: mimeType, parents: [folderId] },
+    media: { mimeType: mimeType, body: Readable.fromWeb(response.body) },
+    fields: 'id,name,mimeType,size,webViewLink'
+  });
+  return uploaded.data;
+}
+
+async function processDriveUploadJob(jobId) {
+  const claimed = await pool.query(
+    "UPDATE catalog_drive_upload_jobs SET status = 'running', updated_at = NOW() WHERE id = $1 AND status IN ('queued', 'running') RETURNING id, series_id",
+    [jobId]
+  );
+  if (!claimed.rowCount) return;
+  try {
+    const job = claimed.rows[0];
+    const seriesResult = await pool.query('SELECT title FROM catalog_series WHERE id = $1', [job.series_id]);
+    if (!seriesResult.rowCount) throw new Error('A novelinha não foi encontrada.');
+    const drive = await googleDriveClient();
+    const rootFolder = await findOrCreateDriveFolder(drive, 'NovelPlay', null);
+    const seriesFolder = await findOrCreateDriveFolder(drive, seriesResult.rows[0].title, rootFolder);
+    const episodes = await pool.query(
+      "SELECT id, episode_number, video_url FROM catalog_episodes WHERE series_id = $1 AND drive_upload_status = 'queued' ORDER BY episode_number",
+      [job.series_id]
+    );
+    for (const episode of episodes.rows) {
+      await pool.query("UPDATE catalog_episodes SET drive_upload_status = 'uploading', drive_upload_error = '' WHERE id = $1", [episode.id]);
+      try {
+        const file = await downloadAndUploadEpisode(drive, episode.video_url, seriesFolder, episode.episode_number);
+        await pool.query(
+          "UPDATE catalog_episodes SET drive_file_id = $2, drive_web_view_link = $3, drive_upload_status = 'uploaded', drive_upload_error = '' WHERE id = $1",
+          [episode.id, file.id, file.webViewLink || '']
+        );
+        await pool.query("UPDATE catalog_drive_upload_jobs SET completed_episodes = completed_episodes + 1, updated_at = NOW() WHERE id = $1", [jobId]);
+      } catch (error) {
+        const message = String(error.message || 'Falha ao enviar o vídeo').slice(0, 500);
+        console.warn('Falha no envio ao Drive do episódio ' + episode.episode_number + ':', message);
+        await pool.query("UPDATE catalog_episodes SET drive_upload_status = 'failed', drive_upload_error = $2 WHERE id = $1", [episode.id, message]);
+        await pool.query("UPDATE catalog_drive_upload_jobs SET failed_episodes = failed_episodes + 1, updated_at = NOW() WHERE id = $1", [jobId]);
+      }
+    }
+    const counts = await pool.query(
+      "SELECT COUNT(*) FILTER (WHERE drive_upload_status = 'uploaded')::int AS uploaded, COUNT(*) FILTER (WHERE drive_upload_status = 'failed')::int AS failed FROM catalog_episodes WHERE series_id = $1",
+      [job.series_id]
+    );
+    const uploaded = counts.rows[0].uploaded;
+    const failed = counts.rows[0].failed;
+    await pool.query(
+      'UPDATE catalog_drive_upload_jobs SET status = $2, completed_episodes = $3, failed_episodes = $4, updated_at = NOW() WHERE id = $1',
+      [jobId, failed ? 'completed_with_errors' : 'completed', uploaded, failed]
+    );
+  } catch (error) {
+    console.error('Erro ao processar envio ao Google Drive:', error.message);
+    await pool.query("UPDATE catalog_drive_upload_jobs SET status = 'failed', updated_at = NOW() WHERE id = $1", [jobId]).catch(() => {});
+    await pool.query(
+      "UPDATE catalog_episodes SET drive_upload_status = 'failed', drive_upload_error = $2 WHERE series_id = (SELECT series_id FROM catalog_drive_upload_jobs WHERE id = $1) AND drive_upload_status IN ('queued', 'uploading')",
+      [jobId, String(error.message || 'Falha no envio ao Drive').slice(0, 500)]
+    ).catch(() => {});
+  }
+}
+
 app.get('/admin/google-drive/connect', authRequired, adminRequired, googleDriveLimiter, async (req, res) => {
   try {
     const oauth2 = googleOAuthClient();
@@ -214,7 +375,7 @@ app.get('/admin/google-drive/connect', authRequired, adminRequired, googleDriveL
       access_type: 'offline',
       prompt: 'consent',
       include_granted_scopes: true,
-      scope: ['https://www.googleapis.com/auth/drive.readonly'],
+      scope: ['https://www.googleapis.com/auth/drive.file'],
       state
     });
     return res.json({ authorizationUrl });
@@ -761,12 +922,11 @@ app.post('/admin/catalog/import', authRequired, adminRequired, async (req, res) 
 });
 
 app.post('/admin/catalog/import-links', authRequired, adminRequired, async (req, res) => {
-  if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Acesso exclusivo do administrador.' });
   const title = String(req.body.title || '').trim();
   const synopsis = String(req.body.synopsis || '').trim();
   const coverUrl = String(req.body.coverUrl || '').trim();
   const episodes = Array.isArray(req.body.episodes) ? req.body.episodes : [];
-  if (req.body.authorizedPlayback !== true) return res.status(400).json({ error: 'Confirme que possui autorização para reproduzir e distribuir os vídeos.' });
+  if (req.body.authorizedPlayback !== true) return res.status(400).json({ error: 'Confirme que possui autorização para armazenar e reproduzir estes vídeos.' });
   if (!title || title.length > 180) return res.status(400).json({ error: 'Nome da novelinha inválido.' });
   if (synopsis.length > 4000) return res.status(400).json({ error: 'Sinopse muito longa.' });
   if (coverUrl && (!isHttpsUrl(coverUrl) || coverUrl.length > 2000)) return res.status(400).json({ error: 'A capa precisa ser uma URL HTTPS válida.' });
@@ -783,39 +943,63 @@ app.post('/admin/catalog/import-links', authRequired, adminRequired, async (req,
       return res.status(400).json({ error: 'A lista contém um episódio inválido, link inseguro ou número repetido.' });
     }
     seen.add(number);
-    normalized.push({ number, title: episodeTitle, videoUrl });
+    normalized.push({ number: number, title: episodeTitle, videoUrl: videoUrl });
   }
   normalized.sort((a, b) => a.number - b.number);
+  const connected = await pool.query('SELECT id FROM google_drive_credentials WHERE id = 1');
+  if (!connected.rowCount) return res.status(409).json({ error: 'Conecte o Google Drive antes de importar os episódios.' });
+  const jobId = crypto.randomUUID();
   const client = await pool.connect();
+  let series;
   try {
     await client.query('BEGIN');
     const seriesResult = await client.query(
-      `INSERT INTO catalog_series (title, synopsis, cover_url)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (title) DO UPDATE
-         SET synopsis = EXCLUDED.synopsis,
-             cover_url = CASE WHEN EXCLUDED.cover_url <> '' THEN EXCLUDED.cover_url ELSE catalog_series.cover_url END
-       RETURNING id, title`,
+      'INSERT INTO catalog_series (title, synopsis, cover_url) VALUES ($1, $2, $3) ON CONFLICT (title) DO UPDATE SET synopsis = EXCLUDED.synopsis, cover_url = CASE WHEN EXCLUDED.cover_url <> \\'\\' THEN EXCLUDED.cover_url ELSE catalog_series.cover_url END RETURNING id, title',
       [title, synopsis, coverUrl]
     );
     const seriesId = seriesResult.rows[0].id;
     for (const episode of normalized) {
       await client.query(
-        `INSERT INTO catalog_episodes (series_id, episode_number, title, video_url)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (series_id, episode_number) DO UPDATE
-           SET title = EXCLUDED.title, video_url = EXCLUDED.video_url`,
+        "INSERT INTO catalog_episodes (series_id, episode_number, title, video_url, drive_upload_status, drive_upload_error) VALUES ($1, $2, $3, $4, 'queued', '') ON CONFLICT (series_id, episode_number) DO UPDATE SET title = EXCLUDED.title, video_url = EXCLUDED.video_url, drive_file_id = NULL, drive_web_view_link = NULL, drive_upload_status = 'queued', drive_upload_error = ''",
         [seriesId, episode.number, episode.title, episode.videoUrl]
       );
     }
+    await client.query(
+      "INSERT INTO catalog_drive_upload_jobs (id, series_id, status, total_episodes) VALUES ($1, $2, 'queued', $3)",
+      [jobId, seriesId, normalized.length]
+    );
     await client.query('COMMIT');
-    return res.status(200).json({ imported: true, series: { id: String(seriesId), title: seriesResult.rows[0].title }, episodeCount: normalized.length });
+    series = { id: String(seriesId), title: seriesResult.rows[0].title };
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('Erro ao importar links compartilhados:', error.message);
-    return res.status(500).json({ error: 'Não foi possível importar os links.' });
+    console.error('Erro ao iniciar importação para o Drive:', error.message);
+    return res.status(500).json({ error: 'Não foi possível iniciar a importação.' });
   } finally {
     client.release();
+  }
+  res.status(202).json({ imported: true, jobId: jobId, series: series, episodeCount: normalized.length, uploadStatus: 'queued' });
+  setImmediate(() => processDriveUploadJob(jobId));
+});
+
+app.get('/admin/catalog/import-jobs/:jobId', authRequired, adminRequired, async (req, res) => {
+  const jobId = String(req.params.jobId || '');
+  if (!/^[0-9a-f-]{36}$/i.test(jobId)) return res.status(400).json({ error: 'Importação inválida.' });
+  try {
+    const result = await pool.query(
+      'SELECT j.id, j.status, j.total_episodes, j.completed_episodes, j.failed_episodes, s.title FROM catalog_drive_upload_jobs j JOIN catalog_series s ON s.id = j.series_id WHERE j.id = $1',
+      [jobId]
+    );
+    if (!result.rowCount) return res.status(404).json({ error: 'Importação não encontrada.' });
+    const row = result.rows[0];
+    return res.json({
+      jobId: row.id, title: row.title, status: row.status,
+      total: row.total_episodes, uploaded: row.completed_episodes,
+      failed: row.failed_episodes,
+      pending: Math.max(0, row.total_episodes - row.completed_episodes - row.failed_episodes)
+    });
+  } catch (error) {
+    console.error('Erro ao consultar progresso da importação:', error.message);
+    return res.status(500).json({ error: 'Não foi possível consultar o progresso.' });
   }
 });
 
