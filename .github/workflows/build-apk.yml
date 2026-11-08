@@ -48,7 +48,7 @@ jobs:
           if permission not in s:
               s = s.replace(
                   '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
-                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\\n    ' + permission
+                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    ' + permission
               )
           p.write_text(s)
           PY
