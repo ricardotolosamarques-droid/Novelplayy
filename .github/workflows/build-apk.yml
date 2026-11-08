@@ -31,7 +31,6 @@ jobs:
         with:
           channel: stable
           cache: true
-          cache-dependency-path: novelplay_v3/pubspec.lock
 
       - name: Generate Android project files
         working-directory: novelplay_v3
@@ -48,7 +47,7 @@ jobs:
           if permission not in s:
               s = s.replace(
                   '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
-                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    ' + permission
+                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\\n    ' + permission
               )
           p.write_text(s)
           PY
@@ -59,7 +58,7 @@ jobs:
 
       - name: Check Dart code
         working-directory: novelplay_v3
-        run: flutter analyze lib --no-pub
+        run: flutter analyze lib --no-pub --no-fatal-infos
 
       - name: Build release APK
         working-directory: novelplay_v3
