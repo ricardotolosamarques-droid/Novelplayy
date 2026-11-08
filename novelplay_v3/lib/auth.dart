@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'drive_screen.dart';
 import 'link_import_screen.dart';
 
@@ -120,6 +121,23 @@ class NovelAuth {
     await _request('/admin/catalog/series/$seriesId/episodes', bearer: saved, body: {
       'number': number, 'title': title, 'videoUrl': videoUrl,
     });
+  }
+
+  static Future<Map<String, dynamic>> googleDriveStatus() async {
+    final saved = await token();
+    if (saved == null) throw Exception('Faça login novamente.');
+    return _request('/admin/google-drive/status', bearer: saved);
+  }
+
+  static Future<String> googleDriveConnectUrl() async {
+    final saved = await token();
+    if (saved == null) throw Exception('Faça login novamente.');
+    final data = await _request('/admin/google-drive/connect', bearer: saved);
+    final value = data['authorizationUrl'];
+    if (value is! String || value.isEmpty) {
+      throw Exception('O servidor não retornou o endereço de autorização.');
+    }
+    return value;
   }
 
   static Future<void> deleteSeries(String seriesId) async {
@@ -272,6 +290,104 @@ class _AuthScreenState extends State<AuthScreen> {
   );
 }
 
+class GoogleDriveAdminScreen extends StatefulWidget {
+  const GoogleDriveAdminScreen({super.key});
+  @override
+  State<GoogleDriveAdminScreen> createState() => _GoogleDriveAdminScreenState();
+}
+
+class _GoogleDriveAdminScreenState extends State<GoogleDriveAdminScreen> {
+  bool loading = true, connecting = false, connected = false;
+  String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkStatus();
+  }
+
+  Future<void> _checkStatus() async {
+    setState(() { loading = true; error = null; });
+    try {
+      final result = await NovelAuth.googleDriveStatus();
+      if (!mounted) return;
+      setState(() { connected = result['connected'] == true; loading = false; });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { error = e.toString().replaceFirst('Exception: ', ''); loading = false; });
+    }
+  }
+
+  Future<void> _connect() async {
+    setState(() { connecting = true; error = null; });
+    try {
+      final url = await NovelAuth.googleDriveConnectUrl();
+      final opened = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      if (!opened) throw Exception('Não foi possível abrir a página do Google. Tente novamente.');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Conclua a autorização no Google e volte ao NovelPlay. Depois toque em Verificar conexão.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => connecting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.all(20),
+    children: [
+      const Icon(Icons.cloud_outlined, size: 64, color: Color(0xffff6b9d)),
+      const SizedBox(height: 14),
+      const Text('Google Drive', textAlign: TextAlign.center,
+        style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 8),
+      const Text('Conecte a conta Google que contém as pastas, capas e vídeos das novelinhas.',
+        textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
+      const SizedBox(height: 24),
+      Card(
+        color: const Color(0xff1b1b27),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(children: [
+            Icon(connected ? Icons.check_circle : Icons.info_outline,
+              color: connected ? Colors.greenAccent : Colors.orangeAccent),
+            const SizedBox(width: 12),
+            Expanded(child: Text(
+              loading ? 'Verificando conexão...' : connected ? 'Google Drive conectado' : 'Google Drive não conectado',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            )),
+            if (loading) const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+          ]),
+        ),
+      ),
+      if (error != null) Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Text(error!, style: const TextStyle(color: Colors.redAccent), textAlign: TextAlign.center),
+      ),
+      const SizedBox(height: 14),
+      FilledButton.icon(
+        onPressed: connecting ? null : _connect,
+        icon: connecting ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.login),
+        label: Text(connecting ? 'Abrindo Google...' : connected ? 'Reconectar Google Drive' : 'Conectar Google Drive'),
+        style: FilledButton.styleFrom(backgroundColor: const Color(0xffff6b9d), padding: const EdgeInsets.symmetric(vertical: 15)),
+      ),
+      const SizedBox(height: 10),
+      OutlinedButton.icon(
+        onPressed: loading ? null : _checkStatus,
+        icon: const Icon(Icons.refresh),
+        label: const Text('Verificar conexão'),
+      ),
+      const SizedBox(height: 18),
+      const Text('Ao tocar em Conectar, o Google abrirá uma página para você escolher a conta e autorizar o acesso de leitura ao Drive. Depois, volte ao app e toque em Verificar conexão.',
+        textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, height: 1.4)),
+    ],
+  );
+}
+
 class AdminUsersScreen extends StatefulWidget {
   const AdminUsersScreen({super.key});
   @override
@@ -369,11 +485,11 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   ));
 
   @override
-  Widget build(BuildContext context) => DefaultTabController(length: 2, child: Scaffold(
+  Widget build(BuildContext context) => DefaultTabController(length: 3, child: Scaffold(
     backgroundColor: const Color(0xff101018),
     appBar: AppBar(title: const Text('Painel administrativo'), actions: [
       IconButton(tooltip: 'Atualizar', onPressed: _reload, icon: const Icon(Icons.refresh)),
-    ], bottom: const TabBar(tabs: [Tab(text: 'USUÁRIOS'), Tab(text: 'CATÁLOGO')])),
+    ], bottom: const TabBar(tabs: [Tab(text: 'USUÁRIOS'), Tab(text: 'CATÁLOGO'), Tab(text: 'GOOGLE DRIVE')])),
     floatingActionButton: Builder(builder: (ctx) => FloatingActionButton.extended(
       onPressed: () { if (DefaultTabController.of(ctx).index == 1) _createSeries(); else _reload(); },
       icon: const Icon(Icons.add), label: const Text('Nova novelinha'),
@@ -415,6 +531,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           if (series.isEmpty) const Padding(padding: EdgeInsets.all(20), child: Text('Nenhuma novelinha cadastrada no catálogo administrativo.')),
         ]);
       }),
+      const GoogleDriveAdminScreen(),
     ]),
   ));
 }
