@@ -231,7 +231,7 @@ class _AuthGateState extends State<AuthGate> {
       final message = added.isEmpty
           ? 'Este link já está cadastrado na lista de episódios.'
           : duplicates > 0
-              ? '\${added.length} link(s) adicionado(s). \$duplicates repetido(s) já estavam na lista.'
+              ? '${added.length} link(s) adicionado(s). $duplicates repetido(s) já estavam na lista.'
               : 'Links recebidos. Abra Importar do 1DM para revisar os episódios.';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(message),
