@@ -955,7 +955,7 @@ app.post('/admin/catalog/import-links', authRequired, adminRequired, async (req,
   try {
     await client.query('BEGIN');
     const seriesResult = await client.query(
-      'INSERT INTO catalog_series (title, synopsis, cover_url) VALUES ($1, $2, $3) ON CONFLICT (title) DO UPDATE SET synopsis = EXCLUDED.synopsis, cover_url = CASE WHEN EXCLUDED.cover_url <> \\'\\' THEN EXCLUDED.cover_url ELSE catalog_series.cover_url END RETURNING id, title',
+      `INSERT INTO catalog_series (title, synopsis, cover_url) VALUES ($1, $2, $3) ON CONFLICT (title) DO UPDATE SET synopsis = EXCLUDED.synopsis, cover_url = CASE WHEN LENGTH(EXCLUDED.cover_url) > 0 THEN EXCLUDED.cover_url ELSE catalog_series.cover_url END RETURNING id, title`,
       [title, synopsis, coverUrl]
     );
     const seriesId = seriesResult.rows[0].id;
