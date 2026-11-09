@@ -271,13 +271,68 @@ async function findOrCreateDriveFolder(drive, name, parentId) {
   return created.data.id;
 }
 
+async function resolveHighestHlsVariant(sourceUrl) {
+  let playlistUrl = new URL(sourceUrl);
+  for (let depth = 0; depth < 5; depth++) {
+    await assertPublicHttpsUrl(playlistUrl.toString());
+    let response;
+    for (let redirects = 0; redirects <= 5; redirects++) {
+      response = await fetch(playlistUrl, {
+        redirect: 'manual',
+        headers: {
+          'User-Agent': 'NovelPlay/1.0 authorized media transfer',
+          'Accept': 'application/vnd.apple.mpegurl, application/x-mpegURL, */*'
+        },
+        signal: AbortSignal.timeout(30000)
+      });
+      if (![301, 302, 303, 307, 308].includes(response.status)) break;
+      const location = response.headers.get('location');
+      if (!location) throw new Error('Playlist HLS redirecionada sem destino.');
+      playlistUrl = new URL(location, playlistUrl);
+      await assertPublicHttpsUrl(playlistUrl.toString());
+    }
+    if (!response || !response.ok) {
+      throw new Error('Não foi possível consultar a playlist HLS (HTTP ' + (response ? response.status : 'desconhecido') + ').');
+    }
+    const body = await response.text();
+    if (body.length > 2 * 1024 * 1024) throw new Error('Playlist HLS excede o tamanho permitido.');
+    const lines = body.split(/\r?\n/);
+    const variants = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line.startsWith('#EXT-X-STREAM-INF:')) continue;
+      const attrs = line.slice('#EXT-X-STREAM-INF:'.length);
+      const resolution = attrs.match(/(?:^|,)RESOLUTION=(\d+)x(\d+)/i);
+      const bandwidth = attrs.match(/(?:^|,)(?:AVERAGE-BANDWIDTH|BANDWIDTH)=(\d+)/i);
+      let uri = '';
+      for (let j = i + 1; j < lines.length; j++) {
+        const candidate = lines[j].trim();
+        if (candidate && !candidate.startsWith('#')) { uri = candidate; break; }
+      }
+      if (!uri) continue;
+      const width = resolution ? Number(resolution[1]) : 0;
+      const height = resolution ? Number(resolution[2]) : 0;
+      variants.push({
+        url: new URL(uri, playlistUrl).toString(),
+        pixels: width * height,
+        bandwidth: bandwidth ? Number(bandwidth[1]) : 0
+      });
+    }
+    if (!variants.length) return playlistUrl.toString();
+    variants.sort((a, b) => b.pixels - a.pixels || b.bandwidth - a.bandwidth);
+    playlistUrl = new URL(variants[0].url);
+  }
+  throw new Error('A playlist HLS possui redirecionamentos de qualidade em excesso.');
+}
+
 async function uploadHlsEpisode(drive, sourceUrl, folderId, number) {
+  const bestSourceUrl = await resolveHighestHlsVariant(sourceUrl);
   const fileName = 'Episódio ' + String(number).padStart(3, '0') + '.mp4';
   const child = spawn('ffmpeg', [
     '-hide_banner', '-nostdin', '-loglevel', 'warning', '-threads', '1',
     '-protocol_whitelist', 'https,tls,tcp,crypto,data',
     '-user_agent', 'NovelPlay/1.0 authorized media transfer',
-    '-i', sourceUrl,
+    '-i', bestSourceUrl,
     '-map', '0:v:0?', '-map', '0:a:0?',
     '-c', 'copy',
     '-bsf:a', 'aac_adtstoasc',
@@ -319,7 +374,6 @@ async function uploadHlsEpisode(drive, sourceUrl, folderId, number) {
     throw error;
   }
 }
-
 async function downloadAndUploadEpisode(drive, sourceUrl, folderId, number) {
   let current = new URL(sourceUrl);
   let response;
