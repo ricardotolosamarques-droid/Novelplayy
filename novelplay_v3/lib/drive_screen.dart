@@ -929,6 +929,7 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
   VideoPlayerController? _nextController;
   int? _nextControllerIndex;
   bool _preloadingNext = false;
+  bool _pageTransitioning = false;
   int _autoAdvancedIndex = -1;
   bool _loading = true;
   bool _showPlaybackControl = true;
@@ -1062,13 +1063,19 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
   }
 
   void _swipeToEpisode(bool next) {
+    // Bloqueia gestos repetidos enquanto a página/player anterior ainda está
+    // sendo salvo e o próximo episódio está sendo inicializado.
+    if (_pageTransitioning) return;
     final target = _index + (next ? 1 : -1);
     if (target < 0 || target >= widget.episodes.length) return;
+    _pageTransitioning = true;
     _pageController.animateToPage(
       target,
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeOut,
-    );
+    ).catchError((_) {
+      _pageTransitioning = false;
+    });
   }
 
   Future<void> _persistCurrentProgress() async {
@@ -1110,10 +1117,7 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
         _index < widget.episodes.length - 1 &&
         _autoAdvancedIndex != _index) {
       _autoAdvancedIndex = _index;
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
-      );
+      _swipeToEpisode(true);
     }
     // O indicador de progresso observa o controller; não reconstruir a tela
     // inteira a cada atualização de posição do vídeo.
@@ -1262,12 +1266,18 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
     );
     if (!mounted) return;
     if (selected != null && selected != _index) {
+      if (_pageTransitioning) return;
+      _pageTransitioning = true;
       await _persistCurrentProgress();
-      await _pageController.animateToPage(
-        selected,
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOut,
-      );
+      try {
+        await _pageController.animateToPage(
+          selected,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOut,
+        );
+      } catch (_) {
+        _pageTransitioning = false;
+      }
     } else if (_controller != null && _controller!.value.isPlaying) {
       _scheduleHidePlaybackControl();
     }
@@ -1297,10 +1307,17 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
               physics: const NeverScrollableScrollPhysics(),
               itemCount: widget.episodes.length,
               onPageChanged: (value) async {
-                await _persistCurrentProgress();
-                if (!mounted) return;
-                setState(() => _index = value);
-                await _initialize();
+                try {
+                  // O índice só muda depois de salvar o progresso do episódio
+                  // que estava tocando; durante esse intervalo novos swipes
+                  // ficam bloqueados para não calcular o destino com índice velho.
+                  await _persistCurrentProgress();
+                  if (!mounted) return;
+                  setState(() => _index = value);
+                  await _initialize();
+                } finally {
+                  _pageTransitioning = false;
+                }
               },
               itemBuilder: (_, __) => const ColoredBox(color: Colors.black),
             ),
