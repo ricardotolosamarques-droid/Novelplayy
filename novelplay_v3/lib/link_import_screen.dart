@@ -278,7 +278,7 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
             child: ListTile(
               title: Text((job['title'] ?? 'Novelinha').toString(), maxLines: 1, overflow: TextOverflow.ellipsis),
               subtitle: Text('${job['uploaded'] ?? 0} enviados • ${job['failed'] ?? 0} falharam • ${job['pending'] ?? 0} pendentes de ${job['total'] ?? 0}'),
-              trailing: (job['failed'] as num? ?? 0) > 0 || (job['status'] == 'failed')
+              trailing: ((job['failed'] as num?) ?? 0) > 0 || (job['status'] == 'failed')
                 ? TextButton(
                     onPressed: _busy ? null : () => _retryDriveJob((job['jobId'] ?? '').toString()),
                     child: const Text('Tentar novamente'),
