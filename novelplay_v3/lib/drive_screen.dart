@@ -99,6 +99,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
   int _bottomIndex = 0;
   bool _openingSeries = false;
   late Future<List<dynamic>> _content = _loadSeries();
+  late Future<List<Map<String, dynamic>>> _publishedCatalogFuture = _loadPublishedCatalog();
   late Future<List<WatchHistoryEntry>> _historyFuture = _loadHistory();
   Timer? _profileClock;
 
@@ -117,6 +118,123 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
     _profileClock?.cancel();
     super.dispose();
   }
+
+  Future<List<Map<String, dynamic>>> _loadPublishedCatalog() async {
+    final response = await http.get(
+      Uri.parse('https://novelplay-api-ee5f.onrender.com/catalog'),
+    ).timeout(const Duration(seconds: 25));
+    if (response.statusCode != 200) {
+      throw Exception('Catálogo respondeu HTTP ${response.statusCode}.');
+    }
+    final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+    return (data['series'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Widget _publishedHomeSection() => FutureBuilder<List<Map<String, dynamic>>>(
+    future: _publishedCatalogFuture,
+    builder: (context, snapshot) {
+      final published = snapshot.data ?? const <Map<String, dynamic>>[];
+      if (snapshot.connectionState != ConnectionState.done || published.isEmpty) {
+        return const SizedBox.shrink();
+      }
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 22),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'NOVELINHAS PUBLICADAS',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+                ),
+              ),
+              Text(
+                '${published.length} títulos',
+                style: const TextStyle(color: Color(0xff999999), fontSize: 11),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 205,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: published.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, index) {
+                final item = published[index];
+                final cover = (item['coverUrl'] ?? '').toString();
+                final title = (item['title'] ?? 'Novelinha').toString();
+                final episodes = (item['episodes'] as List? ?? const []).length;
+                return SizedBox(
+                  width: 126,
+                  child: Material(
+                    color: const Color(0xff242424),
+                    borderRadius: BorderRadius.circular(7),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const PublishedCatalogScreen(),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: cover.startsWith('https://')
+                                  ? Image.network(
+                                      cover,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const ColoredBox(
+                                        color: Color(0xff38202a),
+                                        child: Icon(Icons.movie_outlined, size: 45, color: Colors.white38),
+                                      ),
+                                    )
+                                  : const ColoredBox(
+                                      color: Color(0xff38202a),
+                                      child: Icon(Icons.movie_outlined, size: 45, color: Colors.white38),
+                                    ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  '$episodes episódios',
+                                  style: const TextStyle(color: Colors.white60, fontSize: 10),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      );
+    },
+  );
 
   Future<List<WatchHistoryEntry>> _loadHistory() async {
     final prefs = await SharedPreferences.getInstance();
@@ -372,6 +490,9 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
   Future<void> _refresh() async {
     setState(() {
       _content = _selectedFolderId == null ? _loadSeries() : _loadEpisodes(_selectedFolderId!);
+      if (_selectedFolderId == null && _bottomIndex == 0) {
+        _publishedCatalogFuture = _loadPublishedCatalog();
+      }
     });
     try {
       await _content;
@@ -406,7 +527,10 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
         bottomNavigationBar: _selectedFolderId == null
             ? BottomNavigationBar(
                 currentIndex: _bottomIndex,
-                onTap: (index) => setState(() => _bottomIndex = index),
+                onTap: (index) => setState(() {
+                  _bottomIndex = index;
+                  if (index == 0) _publishedCatalogFuture = _loadPublishedCatalog();
+                }),
                 backgroundColor: const Color(0xff080808),
                 selectedItemColor: Colors.white,
                 unselectedItemColor: const Color(0xff858585),
@@ -435,6 +559,25 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
               return const Center(child: CircularProgressIndicator(color: Color(0xffff6b9d)));
             }
             if (snapshot.hasError) {
+              if (_selectedFolderId == null && _bottomIndex == 0) {
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
+                  children: [
+                    _publishedHomeSection(),
+                    const SizedBox(height: 18),
+                    Text(
+                      'Não foi possível carregar as séries do Google Drive: ${snapshot.error.toString().replaceFirst('Exception: ', '')}',
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: _refresh,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Tentar novamente'),
+                    ),
+                  ],
+                );
+              }
               return _DriveMessage(
                 title: 'Não foi possível acessar o Google Drive',
                 message: snapshot.error.toString().replaceFirst('Exception: ', ''),
@@ -450,6 +593,19 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                 final matchesTab = _bottomIndex != 2 || _favoriteIds.contains(item.id);
                 return matchesSearch && matchesTab;
               }).toList();
+              if (allSeries.isEmpty && _bottomIndex == 0) {
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
+                  children: [
+                    _publishedHomeSection(),
+                    const SizedBox(height: 18),
+                    const Text(
+                      'Ainda não há séries na pasta do Google Drive.',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                  ],
+                );
+              }
               if (allSeries.isEmpty) {
                 return _DriveMessage(
                   title: 'Nenhuma série encontrada',
@@ -497,6 +653,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                       _homeCategory('CLASSIFICAÇÃO', 2),
                       _homeCategory('CATEGORIAS', 3),
                     ])),
+                    if (_bottomIndex == 0) _publishedHomeSection(),
                     if (_bottomIndex != 2) ...[
                       const SizedBox(height: 8),
                       GestureDetector(
