@@ -292,11 +292,24 @@ async function downloadAndUploadEpisode(drive, sourceUrl, folderId, number) {
     throw new Error('O link excedeu o limite de redirecionamentos.');
   }
   if (!response.ok || !response.body) throw new Error('Não foi possível baixar o vídeo (HTTP ' + response.status + ').');
-  const mimeType = (response.headers.get('content-type') || 'application/octet-stream').split(';')[0].trim();
-  if (mimeType === 'text/html' || mimeType.includes('json') || mimeType.startsWith('text/')) {
+  const sourceMimeType = (response.headers.get('content-type') || 'application/octet-stream').split(';')[0].trim().toLowerCase();
+  if (sourceMimeType === 'text/html' || sourceMimeType.includes('json') || sourceMimeType.startsWith('text/')) {
     await response.body.cancel().catch(() => {});
     throw new Error('O link não retornou um arquivo de vídeo direto. Use um link de download válido.');
   }
+  // Muitos servidores de hospedagem entregam MP4 como application/octet-stream.
+  // Como os episódios são gravados com extensão .mp4, informe explicitamente
+  // video/mp4 ao Google Drive para habilitar a pré-visualização de vídeo.
+  const disposition = response.headers.get('content-disposition') || '';
+  const isMp4Source = /\\.mp4(?:$|[?;])/i.test(current.pathname) || /filename[^;]*\\.mp4/i.test(disposition);
+  let mimeType = sourceMimeType;
+  if (sourceMimeType === 'application/octet-stream' || sourceMimeType === 'application/mp4' || !sourceMimeType) {
+    mimeType = 'video/mp4';
+  } else if (!sourceMimeType.startsWith('video/')) {
+    await response.body.cancel().catch(() => {});
+    throw new Error('O link retornou um tipo de arquivo que não é vídeo (' + sourceMimeType + ').');
+  }
+  if (isMp4Source && mimeType === 'application/octet-stream') mimeType = 'video/mp4';
   const length = Number(response.headers.get('content-length') || 0);
   if (length > 2 * 1024 * 1024 * 1024) {
     await response.body.cancel().catch(() => {});
