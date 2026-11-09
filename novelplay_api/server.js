@@ -8,7 +8,9 @@ const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 const dns = require('dns').promises;
 const net = require('net');
-const { Readable } = require('stream');
+const { Readable, Transform } = require('stream');
+const { spawn } = require('child_process');
+const ffmpegPath = require('ffmpeg-static');
 const { google } = require('googleapis');
 
 const app = express();
@@ -270,6 +272,55 @@ async function findOrCreateDriveFolder(drive, name, parentId) {
   return created.data.id;
 }
 
+async function uploadHlsEpisode(drive, sourceUrl, folderId, number) {
+  if (!ffmpegPath) throw new Error('Conversor de vídeo HLS indisponível no servidor.');
+  const fileName = 'Episódio ' + String(number).padStart(3, '0') + '.mp4';
+  const child = spawn(ffmpegPath, [
+    '-hide_banner', '-loglevel', 'error',
+    '-protocol_whitelist', 'https,tls,tcp,crypto,data',
+    '-user_agent', 'NovelPlay/1.0 authorized media transfer',
+    '-i', sourceUrl,
+    '-map', '0:v:0?', '-map', '0:a:0?',
+    '-c', 'copy',
+    '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+    '-f', 'mp4', 'pipe:1'
+  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let stderr = '';
+  let outputBytes = 0;
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-8000); });
+  const limitedOutput = new Transform({
+    transform(chunk, encoding, callback) {
+      outputBytes += chunk.length;
+      if (outputBytes > 2 * 1024 * 1024 * 1024) {
+        callback(new Error('O vídeo convertido ultrapassa o limite de 2 GB por episódio.'));
+        child.kill('SIGKILL');
+      } else callback(null, chunk);
+    }
+  });
+  child.stdout.pipe(limitedOutput);
+  const closePromise = new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (code, signal) => {
+      if (code === 0) resolve();
+      else reject(new Error(('Falha ao converter playlist HLS: ' + (stderr.trim() || ('FFmpeg encerrou com código ' + code + (signal ? ' (' + signal + ')' : '')))).slice(0, 500)));
+    });
+  });
+  try {
+    const uploadPromise = drive.files.create({
+      requestBody: { name: fileName, mimeType: 'video/mp4', parents: [folderId] },
+      media: { mimeType: 'video/mp4', body: limitedOutput },
+      fields: 'id,name,mimeType,size,webViewLink'
+    });
+    const [uploaded] = await Promise.all([uploadPromise, closePromise]);
+    return uploaded.data;
+  } catch (error) {
+    child.kill('SIGKILL');
+    limitedOutput.destroy();
+    throw error;
+  }
+}
+
 async function downloadAndUploadEpisode(drive, sourceUrl, folderId, number) {
   let current = new URL(sourceUrl);
   let response;
@@ -293,6 +344,11 @@ async function downloadAndUploadEpisode(drive, sourceUrl, folderId, number) {
   }
   if (!response.ok || !response.body) throw new Error('Não foi possível baixar o vídeo (HTTP ' + response.status + ').');
   const sourceMimeType = (response.headers.get('content-type') || 'application/octet-stream').split(';')[0].trim().toLowerCase();
+  const isHls = sourceMimeType.includes('mpegurl') || /\\.m3u8(?:$|[?])/i.test(current.pathname);
+  if (isHls) {
+    await response.body.cancel().catch(() => {});
+    return uploadHlsEpisode(drive, current.toString(), folderId, number);
+  }
   if (sourceMimeType === 'text/html' || sourceMimeType.includes('json') || sourceMimeType.startsWith('text/')) {
     await response.body.cancel().catch(() => {});
     throw new Error('O link não retornou um arquivo de vídeo direto. Use um link de download válido.');
