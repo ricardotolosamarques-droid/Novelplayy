@@ -21,7 +21,7 @@ void _captureError(Object error, StackTrace stack) {
 }
 
 void main() {
-  runZonedGuarded(() {
+  runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
     FlutterError.onError = (details) {
       _captureError(details.exception, details.stack ?? StackTrace.current);
@@ -30,6 +30,16 @@ void main() {
       _captureError(error, stack);
       return true;
     };
+    try {
+      const diagnostics = MethodChannel('novelplay/diagnostics');
+      final previousCrash =
+          await diagnostics.invokeMethod<String>('getLastCrash');
+      if (previousCrash != null && previousCrash.isNotEmpty) {
+        _diagnosticError.value = previousCrash;
+      }
+    } catch (error) {
+      debugPrint('Não foi possível ler o relatório nativo: $error');
+    }
     runApp(const NovelPlay());
   }, _captureError);
 }
@@ -83,6 +93,17 @@ class NovelPlayDiagnosticScreen extends StatelessWidget {
                   ),
                   icon: const Icon(Icons.copy),
                   label: const Text('Copiar erro'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: () async {
+                    try {
+                      await const MethodChannel('novelplay/diagnostics')
+                          .invokeMethod<void>('clearLastCrash');
+                    } catch (_) {}
+                    _diagnosticError.value = null;
+                  },
+                  child: const Text('Limpar relatório e abrir app'),
                 ),
                 const SizedBox(height: 8),
                 const Text(
