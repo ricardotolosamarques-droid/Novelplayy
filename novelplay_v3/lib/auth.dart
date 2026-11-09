@@ -162,7 +162,7 @@ class AuthGate extends StatefulWidget {
   @override
   State<AuthGate> createState() => _AuthGateState();
 }
-class _AuthGateState extends State<AuthGate> {
+class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   static const MethodChannel _shareChannel = MethodChannel('novelplay/share');
   static const String _pendingLinksKey = 'novelplay_pending_shared_links';
   NovelUser? user;
@@ -171,11 +171,21 @@ class _AuthGateState extends State<AuthGate> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _shareChannel.setMethodCallHandler((call) async {
       if (call.method == 'sharedText') await _saveSharedText(call.arguments);
     });
     _consumeInitialShare();
     _restore();
+  }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _consumeInitialShare();
+  }
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
   Future<void> _consumeInitialShare() async {
     try {
