@@ -589,119 +589,175 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                       },
                     ),
                     const SizedBox(height: 13),
-                    if (series.isEmpty && _bottomIndex != 0)
-                      const Padding(padding: EdgeInsets.all(24), child: Text('Nenhuma novelinha encontrada. Sua lista aparece aqui quando você salvar uma série.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60))),
-                    if (series.isNotEmpty)
-                      GridView.builder(
-                        shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-                        itemCount: series.length,
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 9, mainAxisSpacing: 13, childAspectRatio: 0.62),
-                        itemBuilder: (context, index) {
-                          final item = series[index];
-                          final favorite = _favoriteIds.contains(item.id);
-                          return Material(
-                            color: const Color(0xff242424), borderRadius: BorderRadius.circular(5), clipBehavior: Clip.antiAlias,
-                            child: InkWell(onTap: () => _openSeries(item), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Expanded(child: Stack(fit: StackFit.expand, children: [
-                                if (item.coverId != null)
-                                  Image.network('https://drive.google.com/uc?export=view&id=${item.coverId}', fit: BoxFit.cover, errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xff38202a), child: Icon(Icons.movie_outlined, size: 55, color: Colors.white38)))
-                                else
-                                  const ColoredBox(color: Color(0xff38202a), child: Icon(Icons.movie_outlined, size: 55, color: Colors.white38)),
-                                Positioned(left: 6, top: 6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4), decoration: BoxDecoration(color: const Color(0xff7134e8), borderRadius: BorderRadius.circular(4)), child: const Text('NOVEL', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900)))),
-                                Positioned(right: 2, top: 1, child: IconButton(visualDensity: VisualDensity.compact, onPressed: () => setState(() { if (!_favoriteIds.add(item.id)) _favoriteIds.remove(item.id); }), icon: Icon(favorite ? Icons.favorite : Icons.favorite_border, color: favorite ? const Color(0xffff3155) : Colors.white, size: 19))),
-                              ])),
-                              Padding(padding: const EdgeInsets.fromLTRB(9, 8, 9, 9), child: Text(item.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, height: 1.15, fontWeight: FontWeight.w700))),
-                            ])),
+                    FutureBuilder<List<Map<String, dynamic>>>(
+                      future: _publishedCatalogFuture,
+                      builder: (context, publishedSnapshot) {
+                        final published = _bottomIndex == 0
+                            ? (publishedSnapshot.data ?? const <Map<String, dynamic>>[])
+                            : const <Map<String, dynamic>>[];
+                        final total = series.length + published.length;
+                        if (total == 0) {
+                          return const Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Text(
+                              'Nenhuma novelinha encontrada. Sua lista aparece aqui quando você salvar uma série.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.white60),
+                            ),
                           );
-                        },
-                      ),
-                    if (_bottomIndex == 0)
-                      FutureBuilder<List<Map<String, dynamic>>>(
-                        future: _publishedCatalogFuture,
-                        builder: (context, publishedSnapshot) {
-                          final published = publishedSnapshot.data ?? const <Map<String, dynamic>>[];
-                          if (published.isEmpty) return const SizedBox.shrink();
-                          return Padding(
-                            padding: EdgeInsets.only(top: series.isEmpty ? 0 : 13),
-                            child: GridView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: published.length,
-                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                crossAxisSpacing: 9,
-                                mainAxisSpacing: 13,
-                                childAspectRatio: 0.62,
-                              ),
-                              itemBuilder: (context, index) {
-                                final item = published[index];
-                                final title = (item['title'] ?? 'Novelinha').toString();
-                                final cover = (item['coverUrl'] ?? '').toString();
-                                final seriesId = (item['id'] ?? '').toString();
-                                return Material(
-                                  color: const Color(0xff242424),
-                                  borderRadius: BorderRadius.circular(5),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: InkWell(
-                                    onTap: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => PublishedCatalogScreen(initialSeriesId: seriesId),
-                                      ),
+                        }
+                        return GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: total,
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 9,
+                            mainAxisSpacing: 13,
+                            childAspectRatio: 0.62,
+                          ),
+                          itemBuilder: (context, index) {
+                            if (index >= series.length) {
+                              final item = published[index - series.length];
+                              final title = (item['title'] ?? 'Novelinha').toString();
+                              final cover = (item['coverUrl'] ?? '').toString();
+                              final seriesId = (item['id'] ?? '').toString();
+                              return Material(
+                                color: const Color(0xff242424),
+                                borderRadius: BorderRadius.circular(5),
+                                clipBehavior: Clip.antiAlias,
+                                child: InkWell(
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => PublishedCatalogScreen(initialSeriesId: seriesId),
                                     ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Expanded(
-                                          child: Stack(
-                                            fit: StackFit.expand,
-                                            children: [
-                                              cover.startsWith('https://')
-                                                  ? Image.network(
-                                                      cover,
-                                                      fit: BoxFit.cover,
-                                                      errorBuilder: (_, __, ___) => const ColoredBox(
-                                                        color: Color(0xff38202a),
-                                                        child: Icon(Icons.movie_outlined, size: 55, color: Colors.white38),
-                                                      ),
-                                                    )
-                                                  : const ColoredBox(
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: Stack(
+                                          fit: StackFit.expand,
+                                          children: [
+                                            cover.startsWith('https://')
+                                                ? Image.network(
+                                                    cover,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (_, __, ___) => const ColoredBox(
                                                       color: Color(0xff38202a),
                                                       child: Icon(Icons.movie_outlined, size: 55, color: Colors.white38),
                                                     ),
-                                              Positioned(
-                                                left: 6,
-                                                top: 6,
-                                                child: Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(0xff7134e8),
-                                                    borderRadius: BorderRadius.circular(4),
+                                                  )
+                                                : const ColoredBox(
+                                                    color: Color(0xff38202a),
+                                                    child: Icon(Icons.movie_outlined, size: 55, color: Colors.white38),
                                                   ),
-                                                  child: const Text('NOVEL', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900)),
+                                            Positioned(
+                                              left: 6,
+                                              top: 6,
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xff7134e8),
+                                                  borderRadius: BorderRadius.circular(4),
                                                 ),
+                                                child: const Text('NOVEL', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900)),
                                               ),
-                                            ],
-                                          ),
+                                            ),
+                                          ],
                                         ),
-                                        Padding(
-                                          padding: const EdgeInsets.fromLTRB(9, 8, 9, 9),
-                                          child: Text(
-                                            title,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(fontSize: 13, height: 1.15, fontWeight: FontWeight.w700),
-                                          ),
+                                      ),
+                                      Padding(
+                                        padding: const EdgeInsets.fromLTRB(9, 8, 9, 9),
+                                        child: Text(
+                                          title,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(fontSize: 13, height: 1.15, fontWeight: FontWeight.w700),
                                         ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
-                                );
-                              },
-                            ),
-                          );
-                        },
-                      ),
+                                ),
+                              );
+                            }
+                            final item = series[index];
+                            final favorite = _favoriteIds.contains(item.id);
+                            return Material(
+                              color: const Color(0xff242424),
+                              borderRadius: BorderRadius.circular(5),
+                              clipBehavior: Clip.antiAlias,
+                              child: InkWell(
+                                onTap: () => _openSeries(item),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Stack(
+                                        fit: StackFit.expand,
+                                        children: [
+                                          if (item.coverId != null)
+                                            Image.network(
+                                              'https://drive.google.com/uc?export=view&id=${item.coverId}',
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) => const ColoredBox(
+                                                color: Color(0xff38202a),
+                                                child: Icon(Icons.movie_outlined, size: 55, color: Colors.white38),
+                                              ),
+                                            )
+                                          else
+                                            const ColoredBox(
+                                              color: Color(0xff38202a),
+                                              child: Icon(Icons.movie_outlined, size: 55, color: Colors.white38),
+                                            ),
+                                          Positioned(
+                                            left: 6,
+                                            top: 6,
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xff7134e8),
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: const Text('NOVEL', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900)),
+                                            ),
+                                          ),
+                                          Positioned(
+                                            right: 2,
+                                            top: 1,
+                                            child: IconButton(
+                                              visualDensity: VisualDensity.compact,
+                                              onPressed: () => setState(() {
+                                                if (!_favoriteIds.add(item.id)) _favoriteIds.remove(item.id);
+                                              }),
+                                              icon: Icon(
+                                                favorite ? Icons.favorite : Icons.favorite_border,
+                                                color: favorite ? const Color(0xffff3155) : Colors.white,
+                                                size: 19,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(9, 8, 9, 9),
+                                      child: Text(
+                                        item.name,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 13, height: 1.15, fontWeight: FontWeight.w700),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
                     if (_bottomIndex == 0)
                       FutureBuilder<List<WatchHistoryEntry>>(
                         future: _historyFuture,
