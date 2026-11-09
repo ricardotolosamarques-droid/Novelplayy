@@ -590,7 +590,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                     ),
                     const SizedBox(height: 13),
                     if (series.isEmpty && _bottomIndex != 0)
-                      const Padding(padding: EdgeInsets.all(24), child: Text('Nenhuma novelinha encontrada. Sua lista aparece aqui quando você salvar uma série.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)))
+                      const Padding(padding: EdgeInsets.all(24), child: Text('Nenhuma novelinha encontrada. Sua lista aparece aqui quando você salvar uma série.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60))),
                     if (series.isNotEmpty)
                       GridView.builder(
                         shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
