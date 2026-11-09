@@ -16,8 +16,10 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
   bool _authorized = false, _busy = false, _metadataBusy = false;
   String? _error, _metadataStatus, _uploadStatus;
   List<Map<String, dynamic>> _metadataCandidates = [];
+  List<Map<String, dynamic>> _driveJobs = [];
+  bool _driveJobsBusy = false;
   @override
-  void initState() { super.initState(); _loadQueue(); }
+  void initState() { super.initState(); _loadQueue(); _loadDriveJobs(); }
   Future<void> _loadQueue() async {
     final prefs = await SharedPreferences.getInstance();
     _links.text = prefs.getString(_queueKey) ?? '';
@@ -113,6 +115,74 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
     _metadataCandidates = [];
   }
 
+  Future<String?> _getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_tokenKey);
+  }
+
+  Future<void> _loadDriveJobs() async {
+    if (mounted) setState(() => _driveJobsBusy = true);
+    try {
+      final token = await _getToken();
+      if (token == null) return;
+      final response = await http.get(
+        Uri.parse('$_api/admin/catalog/import-jobs'),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      ).timeout(const Duration(seconds: 20));
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
+      if (response.statusCode != 200) {
+        throw Exception(data is Map ? (data['error'] ?? 'Falha ao consultar envios') : 'Falha ao consultar envios');
+      }
+      final jobs = data is Map && data['jobs'] is List
+          ? (data['jobs'] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+          : <Map<String, dynamic>>[];
+      if (mounted) setState(() => _driveJobs = jobs);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Não consegui consultar os envios anteriores: ${e.toString().replaceFirst('Exception: ', '')}');
+    } finally {
+      if (mounted) setState(() => _driveJobsBusy = false);
+    }
+  }
+
+  Future<void> _retryDriveJob(String jobId) async {
+    if (_busy) return;
+    setState(() { _busy = true; _error = null; _uploadStatus = 'Preparando a retomada do envio...'; });
+    try {
+      final token = await _getToken();
+      if (token == null) throw Exception('Sua sessão expirou. Entre novamente.');
+      final response = await http.post(
+        Uri.parse('$_api/admin/catalog/import-jobs/$jobId/retry'),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      ).timeout(const Duration(seconds: 30));
+      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(data['error'] ?? 'Não foi possível retomar o envio.');
+      }
+      if (data['retried'] == false) {
+        await _loadDriveJobs();
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Todos os episódios desse envio já estão no Google Drive.')));
+        return;
+      }
+      final result = await _waitForUpload(token, jobId);
+      await _loadDriveJobs();
+      if (!mounted) return;
+      final uploaded = (result['uploaded'] as num?)?.toInt() ?? 0;
+      final failed = (result['failed'] as num?)?.toInt() ?? 0;
+      final total = (result['total'] as num?)?.toInt() ?? 0;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(failed == 0
+          ? '$uploaded de $total episódios salvos no Google Drive.'
+          : '$uploaded de $total salvos; $failed ainda falharam.'),
+        duration: const Duration(seconds: 7),
+      ));
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      await _loadDriveJobs();
+    } finally {
+      if (mounted) setState(() { _busy = false; _uploadStatus = null; });
+    }
+  }
+
   Future<Map<String, dynamic>> _waitForUpload(String token, String jobId) async {
     final deadline = DateTime.now().add(const Duration(minutes: 30));
     while (DateTime.now().isBefore(deadline)) {
@@ -197,6 +267,27 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
     appBar: AppBar(title: const Text('Importar do 1DM')),
     body: ListView(padding: const EdgeInsets.all(18), children: [
       const Text('No 1DM, use Compartilhar e escolha NovelPlay. Você também pode colar vários links de uma vez.', style: TextStyle(color: Colors.white70)),
+      if (_driveJobsBusy || _driveJobs.isNotEmpty) ...[
+        Row(children: [
+          const Expanded(child: Text('Envios anteriores ao Google Drive', style: TextStyle(fontWeight: FontWeight.bold))),
+          IconButton(onPressed: _driveJobsBusy ? null : _loadDriveJobs, icon: const Icon(Icons.refresh), tooltip: 'Atualizar envios'),
+        ]),
+        if (_driveJobsBusy) const LinearProgressIndicator(),
+        for (final job in _driveJobs)
+          Card(
+            child: ListTile(
+              title: Text((job['title'] ?? 'Novelinha').toString(), maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text('${job['uploaded'] ?? 0} enviados • ${job['failed'] ?? 0} falharam • ${job['pending'] ?? 0} pendentes de ${job['total'] ?? 0}'),
+              trailing: (job['failed'] as num? ?? 0) > 0 || (job['status'] == 'failed')
+                ? TextButton(
+                    onPressed: _busy ? null : () => _retryDriveJob((job['jobId'] ?? '').toString()),
+                    child: const Text('Tentar novamente'),
+                  )
+                : const Icon(Icons.sync, size: 20),
+            ),
+          ),
+        const SizedBox(height: 10),
+      ],
       const SizedBox(height: 18),
       TextField(controller: _title, onSubmitted: (_) => _lookupMetadata(), decoration: InputDecoration(labelText: 'Nome da novelinha', suffixIcon: IconButton(onPressed: _metadataBusy ? null : _lookupMetadata, icon: const Icon(Icons.search), tooltip: 'Buscar capa e sinopse'))),
       const SizedBox(height: 12),
