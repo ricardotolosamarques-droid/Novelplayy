@@ -8,7 +8,8 @@ import 'package:video_player/video_player.dart';
 const _publishedCatalogApi = 'https://novelplay-api-ee5f.onrender.com/catalog';
 
 class PublishedCatalogScreen extends StatefulWidget {
-  const PublishedCatalogScreen({super.key});
+  final String? initialSeriesId;
+  const PublishedCatalogScreen({super.key, this.initialSeriesId});
   @override
   State<PublishedCatalogScreen> createState() => _PublishedCatalogScreenState();
 }
@@ -65,6 +66,8 @@ class _PublishedCatalogScreenState extends State<PublishedCatalogScreen> {
                 return Card(
                   clipBehavior: Clip.antiAlias,
                   child: ExpansionTile(
+                    initiallyExpanded: widget.initialSeriesId != null &&
+                        (item['id'] ?? '').toString() == widget.initialSeriesId,
                     leading: SizedBox(
                       width: 58,
                       height: 76,
