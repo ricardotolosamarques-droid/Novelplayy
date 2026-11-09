@@ -313,7 +313,7 @@ async function downloadAndUploadEpisode(drive, sourceUrl, folderId, number) {
 
 async function processDriveUploadJob(jobId) {
   const claimed = await pool.query(
-    "UPDATE catalog_drive_upload_jobs SET status = 'running', updated_at = NOW() WHERE id = $1 AND status IN ('queued', 'running') RETURNING id, series_id",
+    "UPDATE catalog_drive_upload_jobs SET status = 'running', updated_at = NOW() WHERE id = $1 AND status = 'queued' RETURNING id, series_id",
     [jobId]
   );
   if (!claimed.rowCount) return;
@@ -1022,6 +1022,29 @@ app.post('/admin/catalog/import-links', authRequired, adminRequired, async (req,
     uploadStatus: 'queued'
   });
   setImmediate(() => processDriveUploadJob(jobId));
+});
+
+app.get('/admin/catalog/import-jobs', authRequired, adminRequired, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT j.id AS "jobId", j.status, j.total_episodes AS total,
+        COUNT(e.id) FILTER (WHERE e.drive_upload_status = 'uploaded')::int AS uploaded,
+        COUNT(e.id) FILTER (WHERE e.drive_upload_status = 'failed')::int AS failed,
+        COUNT(e.id) FILTER (WHERE e.drive_upload_status IN ('queued', 'uploading'))::int AS pending,
+        s.title
+       FROM catalog_drive_upload_jobs j
+       JOIN catalog_series s ON s.id = j.series_id
+       LEFT JOIN catalog_episodes e ON e.drive_upload_job_id = j.id
+       WHERE j.status IN ('failed', 'completed_with_errors', 'queued', 'running')
+       GROUP BY j.id, s.title
+       ORDER BY j.updated_at DESC
+       LIMIT 15`
+    );
+    return res.json({ jobs: result.rows });
+  } catch (error) {
+    console.error('Erro ao listar importações do Drive:', error.message);
+    return res.status(500).json({ error: 'Não foi possível listar os envios ao Drive.' });
+  }
 });
 
 app.get('/admin/catalog/import-jobs/:jobId', authRequired, adminRequired, async (req, res) => {
