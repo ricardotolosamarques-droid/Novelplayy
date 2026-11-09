@@ -180,7 +180,9 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const PublishedCatalogScreen(),
+                          builder: (_) => PublishedCatalogScreen(
+                            initialSeriesId: (item['id'] ?? '').toString(),
+                          ),
                         ),
                       ),
                       child: Column(
