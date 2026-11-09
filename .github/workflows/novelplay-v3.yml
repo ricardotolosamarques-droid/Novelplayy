@@ -65,31 +65,35 @@ jobs:
 
           class MainActivity : FlutterActivity() {
               private val channelName = "novelplay/share"
-              private var channel: MethodChannel? = null
-              private var initialSharedText: String? = null
-
-              override fun onCreate(savedInstanceState: android.os.Bundle?) {
-                  initialSharedText = extractSharedText(intent)
-                  super.onCreate(savedInstanceState)
-              }
 
               override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
                   super.configureFlutterEngine(flutterEngine)
-                  channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
-                  channel?.setMethodCallHandler { call, result ->
-                      if (call.method == "getInitialSharedText") {
-                          result.success(initialSharedText)
-                          initialSharedText = null
-                      } else {
-                          result.notImplemented()
+                  MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
+                      .setMethodCallHandler { call, result ->
+                          if (call.method == "getInitialSharedText") {
+                              val prefs = getSharedPreferences("novelplay_share", MODE_PRIVATE)
+                              val pending = prefs.getString("pending", null)
+                              prefs.edit().remove("pending").apply()
+                              result.success(pending)
+                          } else {
+                              result.notImplemented()
+                          }
                       }
-                  }
               }
+          }
 
-              override fun onNewIntent(intent: Intent) {
-                  super.onNewIntent(intent)
-                  setIntent(intent)
-                  extractSharedText(intent)?.let { channel?.invokeMethod("sharedText", it) }
+          class ShareReceiverActivity : android.app.Activity() {
+              override fun onCreate(savedInstanceState: android.os.Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  val text = extractSharedText(intent)
+                  if (!text.isNullOrBlank()) {
+                      val prefs = getSharedPreferences("novelplay_share", MODE_PRIVATE)
+                      val old = prefs.getString("pending", "").orEmpty()
+                      val combined = listOf(old, text).filter { it.isNotBlank() }.joinToString("\\n")
+                      prefs.edit().putString("pending", combined).apply()
+                  }
+                  finish()
+                  overridePendingTransition(0, 0)
               }
 
               private fun extractSharedText(intent: Intent?): String? {
@@ -115,29 +119,35 @@ jobs:
           android = "{http://schemas.android.com/apk/res/android}"
           ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
           app = root.find("application")
-          activity = next((a for a in app.findall("activity") if a.get(android + "name", "").endswith("MainActivity")), None)
-          if activity is None:
+          main = next((a for a in app.findall("activity") if a.get(android + "name", "").endswith("MainActivity")), None)
+          if main is None:
               raise SystemExit("MainActivity não encontrada no AndroidManifest")
-          activity.set(android + "launchMode", "singleTop")
-          activity.set(android + "exported", "true")
-          existing = {(f.find("action").get(android + "name") if f.find("action") is not None else "",
-                       f.find("data").get(android + "mimeType") if f.find("data") is not None else "")
-                      for f in activity.findall("intent-filter")}
+          main.set(android + "launchMode", "singleTop")
+          receiver_name = ".ShareReceiverActivity"
+          receiver = next((a for a in app.findall("activity") if a.get(android + "name") == receiver_name), None)
+          if receiver is None:
+              receiver = ET.SubElement(app, "activity")
+          receiver.set(android + "name", receiver_name)
+          receiver.set(android + "theme", "@android:style/Theme.Translucent.NoTitleBar")
+          receiver.set(android + "exported", "true")
+          receiver.set(android + "noHistory", "true")
+          receiver.set(android + "excludeFromRecents", "true")
+          receiver.set(android + "finishOnTaskLaunch", "true")
+          for child in list(receiver.findall("intent-filter")):
+              receiver.remove(child)
           for action, mime in [
               ("android.intent.action.SEND", "text/plain"),
               ("android.intent.action.SEND", "video/*"),
               ("android.intent.action.SEND", "application/octet-stream"),
               ("android.intent.action.SEND_MULTIPLE", "video/*"),
           ]:
-              if (action, mime) in existing:
-                  continue
-              filt = ET.SubElement(activity, "intent-filter")
+              filt = ET.SubElement(receiver, "intent-filter")
               ET.SubElement(filt, "action").set(android + "name", action)
               ET.SubElement(filt, "category").set(android + "name", "android.intent.category.DEFAULT")
               ET.SubElement(filt, "data").set(android + "mimeType", mime)
           tree.write(manifest, encoding="utf-8", xml_declaration=True)
           ET.parse(manifest)
-          print("MainActivity e intent-filters de compartilhamento configurados.")
+          print("Compartilhamento em segundo plano configurado com Activity transparente.")
           PY
       - name: Confirmar identificador Android
         working-directory: novelplay_v3/android
