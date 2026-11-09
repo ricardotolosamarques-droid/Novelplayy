@@ -251,9 +251,26 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
   }
 
   Future<void> _restore() async {
-    final restored = await NovelAuth.restore();
-    if (!mounted) return;
-    setState(() { user = restored; loading = false; });
+    try {
+      final restored = await NovelAuth.restore();
+      if (!mounted) return;
+      setState(() {
+        user = restored;
+        loading = false;
+      });
+    } catch (error, stack) {
+      // Never leave the app stuck on the splash/loading screen if a native
+      // storage plugin fails while restoring the saved session. Re-throw
+      // after releasing the UI so the global diagnostic handler can display
+      // the full error report on top of the login screen.
+      if (mounted) {
+        setState(() {
+          user = null;
+          loading = false;
+        });
+      }
+      Error.throwWithStackTrace(error, stack);
+    }
   }
   void _entered(NovelUser value) => setState(() => user = value);
   Future<void> _signOut() async {
