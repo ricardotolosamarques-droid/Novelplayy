@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 
@@ -129,6 +131,8 @@ class _PublishedPlayerState extends State<_PublishedPlayer> {
   late int _index = widget.initialIndex;
   VideoPlayerController? _controller;
   bool _busy = true;
+  bool _showPlaybackControl = true;
+  Timer? _controlsTimer;
   String? _error;
 
   int get _episodeNumber {
@@ -156,8 +160,13 @@ class _PublishedPlayerState extends State<_PublishedPlayer> {
       await player.initialize();
       if (!mounted || _controller != player) return;
       player.addListener(_ended);
-      setState(() => _busy = false);
+      setState(() {
+        _busy = false;
+        _showPlaybackControl = true;
+      });
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
       await player.play();
+      _scheduleHidePlaybackControl();
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -166,6 +175,34 @@ class _PublishedPlayerState extends State<_PublishedPlayer> {
         });
       }
     }
+  }
+
+  void _scheduleHidePlaybackControl() {
+    _controlsTimer?.cancel();
+    _controlsTimer = Timer(const Duration(milliseconds: 900), () {
+      if (!mounted || _controller?.value.isPlaying != true) return;
+      setState(() => _showPlaybackControl = false);
+    });
+  }
+
+  void _togglePlayback() {
+    final player = _controller;
+    if (player == null) return;
+    if (player.value.isPlaying) {
+      _controlsTimer?.cancel();
+      player.pause();
+      setState(() => _showPlaybackControl = true);
+    } else {
+      player.play();
+      setState(() => _showPlaybackControl = true);
+      _scheduleHidePlaybackControl();
+    }
+  }
+
+  void _showPlaybackControls() {
+    if (_controller?.value.isPlaying != true) return;
+    setState(() => _showPlaybackControl = true);
+    _scheduleHidePlaybackControl();
   }
 
   void _ended() {
@@ -194,6 +231,7 @@ class _PublishedPlayerState extends State<_PublishedPlayer> {
   }
 
   Future<void> _showEpisodes() async {
+    _controlsTimer?.cancel();
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: const Color(0xFF171717),
@@ -285,12 +323,20 @@ class _PublishedPlayerState extends State<_PublishedPlayer> {
         ),
       ),
     );
+    if (mounted && _controller?.value.isPlaying == true) {
+      _scheduleHidePlaybackControl();
+    }
   }
 
   @override
   void dispose() {
+    _controlsTimer?.cancel();
     _controller?.removeListener(_ended);
     _controller?.dispose();
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: SystemUiOverlay.values,
+    );
     super.dispose();
   }
 
@@ -331,35 +377,34 @@ class _PublishedPlayerState extends State<_PublishedPlayer> {
                                     alignment: Alignment.center,
                                     children: [
                                       VideoPlayer(player),
-                                      Material(
-                                        color: Colors.transparent,
-                                        child: InkWell(
-                                          customBorder: const CircleBorder(),
-                                          onTap: () {
-                                            setState(() {
-                                              if (player.value.isPlaying) {
-                                                player.pause();
-                                              } else {
-                                                player.play();
-                                              }
-                                            });
-                                          },
-                                          child: Container(
-                                            width: 82,
-                                            height: 82,
-                                            decoration: BoxDecoration(
-                                              color: Colors.black.withOpacity(0.48),
-                                              shape: BoxShape.circle,
-                                              border: Border.all(color: Colors.white70, width: 1.5),
-                                            ),
-                                            child: Icon(
-                                              playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                                              color: Colors.white,
-                                              size: 56,
+                                      Positioned.fill(
+                                        child: GestureDetector(
+                                          behavior: HitTestBehavior.translucent,
+                                          onTap: _showPlaybackControls,
+                                        ),
+                                      ),
+                                      if (_showPlaybackControl)
+                                        Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            customBorder: const CircleBorder(),
+                                            onTap: _togglePlayback,
+                                            child: Container(
+                                              width: 82,
+                                              height: 82,
+                                              decoration: BoxDecoration(
+                                                color: Colors.black.withOpacity(0.48),
+                                                shape: BoxShape.circle,
+                                                border: Border.all(color: Colors.white70, width: 1.5),
+                                              ),
+                                              child: Icon(
+                                                playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                                color: Colors.white,
+                                                size: 56,
+                                              ),
                                             ),
                                           ),
                                         ),
-                                      ),
                                     ],
                                   ),
                                 ),
