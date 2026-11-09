@@ -123,6 +123,10 @@ jobs:
           if main is None:
               raise SystemExit("MainActivity não encontrada no AndroidManifest")
           main.set(android + "launchMode", "singleTop")
+          for child in list(main.findall("intent-filter")):
+              actions = {node.get(android + "name") for node in child.findall("action")}
+              if actions.intersection({"android.intent.action.SEND", "android.intent.action.SEND_MULTIPLE"}):
+                  main.remove(child)
           receiver_name = ".ShareReceiverActivity"
           receiver = next((a for a in app.findall("activity") if a.get(android + "name") == receiver_name), None)
           if receiver is None:
