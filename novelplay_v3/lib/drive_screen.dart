@@ -133,110 +133,6 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
         .toList();
   }
 
-  Widget _publishedHomeSection() => FutureBuilder<List<Map<String, dynamic>>>(
-    future: _publishedCatalogFuture,
-    builder: (context, snapshot) {
-      final published = snapshot.data ?? const <Map<String, dynamic>>[];
-      if (snapshot.connectionState != ConnectionState.done || published.isEmpty) {
-        return const SizedBox.shrink();
-      }
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 22),
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'NOVELINHAS PUBLICADAS',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
-                ),
-              ),
-              Text(
-                '${published.length} títulos',
-                style: const TextStyle(color: Color(0xff999999), fontSize: 11),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 205,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: published.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
-              itemBuilder: (context, index) {
-                final item = published[index];
-                final cover = (item['coverUrl'] ?? '').toString();
-                final title = (item['title'] ?? 'Novelinha').toString();
-                final episodes = (item['episodes'] as List? ?? const []).length;
-                return SizedBox(
-                  width: 126,
-                  child: Material(
-                    color: const Color(0xff242424),
-                    borderRadius: BorderRadius.circular(7),
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => PublishedCatalogScreen(
-                            initialSeriesId: (item['id'] ?? '').toString(),
-                          ),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: SizedBox(
-                              width: double.infinity,
-                              child: cover.startsWith('https://')
-                                  ? Image.network(
-                                      cover,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => const ColoredBox(
-                                        color: Color(0xff38202a),
-                                        child: Icon(Icons.movie_outlined, size: 45, color: Colors.white38),
-                                      ),
-                                    )
-                                  : const ColoredBox(
-                                      color: Color(0xff38202a),
-                                      child: Icon(Icons.movie_outlined, size: 45, color: Colors.white38),
-                                    ),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  title,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
-                                ),
-                                const SizedBox(height: 3),
-                                Text(
-                                  '$episodes episódios',
-                                  style: const TextStyle(color: Colors.white60, fontSize: 10),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      );
-    },
-  );
 
   Future<List<WatchHistoryEntry>> _loadHistory() async {
     final prefs = await SharedPreferences.getInstance();
@@ -565,7 +461,6 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
                   children: [
-                    _publishedHomeSection(),
                     const SizedBox(height: 18),
                     Text(
                       'Não foi possível carregar as séries do Google Drive: ${snapshot.error.toString().replaceFirst('Exception: ', '')}',
@@ -599,7 +494,6 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
                   children: [
-                    _publishedHomeSection(),
                     const SizedBox(height: 18),
                     const Text(
                       'Ainda não há séries na pasta do Google Drive.',
@@ -655,7 +549,6 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                       _homeCategory('CLASSIFICAÇÃO', 2),
                       _homeCategory('CATEGORIAS', 3),
                     ])),
-                    if (_bottomIndex == 0) _publishedHomeSection(),
                     if (_bottomIndex != 2) ...[
                       const SizedBox(height: 8),
                       GestureDetector(
@@ -685,14 +578,20 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                       const Center(child: Text('●  ━  ●  ●  ●  ●', style: TextStyle(color: Colors.white70, fontSize: 10, letterSpacing: 3))),
                     ],
                     const SizedBox(height: 22),
-                    Row(children: [
-                      Expanded(child: Text(_bottomIndex == 2 ? 'MINHA LISTA' : _tabIndex == 1 ? 'NOVOS DRAMAS' : _tabIndex == 2 ? 'CLASSIFICAÇÃO' : 'NOVELINHAS PARA ASSISTIR', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900))),
-                      Text('${series.length} títulos', style: const TextStyle(color: Color(0xff999999), fontSize: 11)),
-                    ]),
+                    FutureBuilder<List<Map<String, dynamic>>>(
+                      future: _publishedCatalogFuture,
+                      builder: (context, publishedSnapshot) {
+                        final publishedCount = _bottomIndex == 0 ? (publishedSnapshot.data?.length ?? 0) : 0;
+                        return Row(children: [
+                          Expanded(child: Text(_bottomIndex == 2 ? 'MINHA LISTA' : _tabIndex == 1 ? 'NOVOS DRAMAS' : _tabIndex == 2 ? 'CLASSIFICAÇÃO' : 'NOVELINHAS PARA ASSISTIR', style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w900))),
+                          Text('${series.length + publishedCount} títulos', style: const TextStyle(color: Color(0xff999999), fontSize: 11)),
+                        ]);
+                      },
+                    ),
                     const SizedBox(height: 13),
-                    if (series.isEmpty)
+                    if (series.isEmpty && _bottomIndex != 0)
                       const Padding(padding: EdgeInsets.all(24), child: Text('Nenhuma novelinha encontrada. Sua lista aparece aqui quando você salvar uma série.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)))
-                    else
+                    if (series.isNotEmpty)
                       GridView.builder(
                         shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
                         itemCount: series.length,
@@ -713,6 +612,93 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                               ])),
                               Padding(padding: const EdgeInsets.fromLTRB(9, 8, 9, 9), child: Text(item.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, height: 1.15, fontWeight: FontWeight.w700))),
                             ])),
+                          );
+                        },
+                      ),
+                    if (_bottomIndex == 0)
+                      FutureBuilder<List<Map<String, dynamic>>>(
+                        future: _publishedCatalogFuture,
+                        builder: (context, publishedSnapshot) {
+                          final published = publishedSnapshot.data ?? const <Map<String, dynamic>>[];
+                          if (published.isEmpty) return const SizedBox.shrink();
+                          return Padding(
+                            padding: EdgeInsets.only(top: series.isEmpty ? 0 : 13),
+                            child: GridView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: published.length,
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                crossAxisSpacing: 9,
+                                mainAxisSpacing: 13,
+                                childAspectRatio: 0.62,
+                              ),
+                              itemBuilder: (context, index) {
+                                final item = published[index];
+                                final title = (item['title'] ?? 'Novelinha').toString();
+                                final cover = (item['coverUrl'] ?? '').toString();
+                                final seriesId = (item['id'] ?? '').toString();
+                                return Material(
+                                  color: const Color(0xff242424),
+                                  borderRadius: BorderRadius.circular(5),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: InkWell(
+                                    onTap: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => PublishedCatalogScreen(initialSeriesId: seriesId),
+                                      ),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                          child: Stack(
+                                            fit: StackFit.expand,
+                                            children: [
+                                              cover.startsWith('https://')
+                                                  ? Image.network(
+                                                      cover,
+                                                      fit: BoxFit.cover,
+                                                      errorBuilder: (_, __, ___) => const ColoredBox(
+                                                        color: Color(0xff38202a),
+                                                        child: Icon(Icons.movie_outlined, size: 55, color: Colors.white38),
+                                                      ),
+                                                    )
+                                                  : const ColoredBox(
+                                                      color: Color(0xff38202a),
+                                                      child: Icon(Icons.movie_outlined, size: 55, color: Colors.white38),
+                                                    ),
+                                              Positioned(
+                                                left: 6,
+                                                top: 6,
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xff7134e8),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: const Text('NOVEL', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900)),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.fromLTRB(9, 8, 9, 9),
+                                          child: Text(
+                                            title,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(fontSize: 13, height: 1.15, fontWeight: FontWeight.w700),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                           );
                         },
                       ),
