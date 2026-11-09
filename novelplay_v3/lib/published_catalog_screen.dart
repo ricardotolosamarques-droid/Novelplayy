@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 const _publishedCatalogApi = 'https://novelplay-api-ee5f.onrender.com/catalog';
 
@@ -16,6 +17,65 @@ class PublishedCatalogScreen extends StatefulWidget {
 
 class _PublishedCatalogScreenState extends State<PublishedCatalogScreen> {
   late Future<List<Map<String, dynamic>>> _request = _load();
+  bool _isAdmin = false;
+  String? _adminToken;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAdminSession();
+  }
+
+  Future<void> _loadAdminSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    final rawUser = prefs.getString('novelplay_auth_user');
+    final token = prefs.getString('novelplay_auth_token');
+    var admin = false;
+    if (rawUser != null) {
+      try {
+        final user = jsonDecode(rawUser) as Map<String, dynamic>;
+        admin = user['role'] == 'admin';
+      } catch (_) {}
+    }
+    if (mounted) setState(() { _isAdmin = admin; _adminToken = token; });
+  }
+
+  Future<void> _deleteSeries(Map<String, dynamic> item) async {
+    final id = (item['id'] ?? '').toString();
+    final title = (item['title'] ?? 'esta publicação').toString();
+    if (!_isAdmin || _adminToken == null || id.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Excluir publicação?'),
+        content: Text('A novelinha "$title" e todos os episódios dela serão removidos do catálogo. Essa ação não pode ser desfeita.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      final response = await http.delete(
+        Uri.parse('https://novelplay-api-ee5f.onrender.com/admin/catalog/series/$id'),
+        headers: {'Authorization': 'Bearer $_adminToken'},
+      ).timeout(const Duration(seconds: 25));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        String message = 'Não foi possível excluir a publicação (HTTP ${response.statusCode}).';
+        try { message = (jsonDecode(response.body) as Map)['error']?.toString() ?? message; } catch (_) {}
+        throw Exception(message);
+      }
+      setState(() => _request = _load());
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Publicação excluída.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao excluir: $error')));
+    }
+  }
 
   Future<List<Map<String, dynamic>>> _load() async {
     final response = await http.get(Uri.parse(_publishedCatalogApi)).timeout(const Duration(seconds: 25));
@@ -81,6 +141,18 @@ class _PublishedCatalogScreenState extends State<PublishedCatalogScreen> {
                     ),
                     title: Text((item['title'] ?? 'Novelinha').toString()),
                     subtitle: Text('${episodes.length} episódios'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_isAdmin)
+                          IconButton(
+                            tooltip: 'Excluir publicação',
+                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                            onPressed: () => _deleteSeries(item),
+                          ),
+                        const Icon(Icons.expand_more),
+                      ],
+                    ),
                     children: [
                       if ((item['synopsis'] ?? '').toString().isNotEmpty)
                         Padding(
@@ -194,9 +266,11 @@ class _PublishedPlayerState extends State<_PublishedPlayer> {
     if (player.value.isPlaying) {
       _controlsTimer?.cancel();
       player.pause();
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: [SystemUiOverlay.top]);
       setState(() => _showPlaybackControl = true);
     } else {
       player.play();
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
       setState(() => _showPlaybackControl = true);
       _scheduleHidePlaybackControl();
     }
