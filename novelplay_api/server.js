@@ -1046,6 +1046,62 @@ app.get('/admin/catalog/import-jobs/:jobId', authRequired, adminRequired, async 
   }
 });
 
+app.post('/admin/catalog/import-jobs/:jobId/retry', authRequired, adminRequired, async (req, res) => {
+  const jobId = String(req.params.jobId || '');
+  if (!/^[0-9a-f-]{36}$/i.test(jobId)) return res.status(400).json({ error: 'Importação inválida.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const jobResult = await client.query(
+      'SELECT id, status FROM catalog_drive_upload_jobs WHERE id = $1 FOR UPDATE',
+      [jobId]
+    );
+    if (!jobResult.rowCount) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Importação não encontrada.' });
+    }
+    if (jobResult.rows[0].status === 'running') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Esta importação já está em andamento.' });
+    }
+    const uploadedResult = await client.query(
+      "SELECT COUNT(*)::int AS count FROM catalog_episodes WHERE drive_upload_job_id = $1 AND drive_upload_status = 'uploaded'",
+      [jobId]
+    );
+    const uploaded = uploadedResult.rows[0].count;
+    await client.query(
+      "UPDATE catalog_episodes SET drive_upload_status = 'queued', drive_upload_error = '' WHERE drive_upload_job_id = $1 AND drive_upload_status IN ('failed', 'uploading')",
+      [jobId]
+    );
+    const pendingResult = await client.query(
+      "SELECT COUNT(*)::int AS count FROM catalog_episodes WHERE drive_upload_job_id = $1 AND drive_upload_status = 'queued'",
+      [jobId]
+    );
+    const pending = pendingResult.rows[0].count;
+    if (!pending) {
+      await client.query(
+        "UPDATE catalog_drive_upload_jobs SET status = 'completed', completed_episodes = $2, failed_episodes = 0, updated_at = NOW() WHERE id = $1",
+        [jobId, uploaded]
+      );
+      await client.query('COMMIT');
+      return res.json({ retried: false, uploaded, pending: 0, message: 'Todos os episódios já estão enviados.' });
+    }
+    await client.query(
+      "UPDATE catalog_drive_upload_jobs SET status = 'queued', completed_episodes = $2, failed_episodes = 0, updated_at = NOW() WHERE id = $1",
+      [jobId, uploaded]
+    );
+    await client.query('COMMIT');
+    res.status(202).json({ retried: true, uploaded, pending });
+    setImmediate(() => processDriveUploadJob(jobId));
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Erro ao retomar envio ao Google Drive:', error.message);
+    return res.status(500).json({ error: 'Não foi possível retomar o envio.' });
+  } finally {
+    client.release();
+  }
+});
+
 app.post('/admin/catalog/series/:seriesId/episodes', authRequired, adminRequired, async (req, res) => {
   if (req.auth.role !== 'admin') return res.status(403).json({ error: 'Acesso exclusivo do administrador.' });
   const seriesId = Number(req.params.seriesId);
