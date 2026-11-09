@@ -36,6 +36,61 @@ jobs:
         working-directory: novelplay_v3
         run: flutter create --platforms=android --org com.example --project-name novelinha_app .
 
+      - name: Add native crash report capture
+        working-directory: novelplay_v3
+        run: |
+          mkdir -p android/app/src/main/kotlin/com/example/novelinha_app
+          cat > android/app/src/main/kotlin/com/example/novelinha_app/MainActivity.kt <<'KOTLIN'
+          package com.example.novelinha_app
+
+          import android.os.Bundle
+          import io.flutter.embedding.android.FlutterActivity
+          import io.flutter.embedding.engine.FlutterEngine
+          import io.flutter.plugin.common.MethodChannel
+          import java.io.File
+
+          class MainActivity : FlutterActivity() {
+              private val channelName = "novelplay/diagnostics"
+              private val reportName = "novelplay_last_crash.txt"
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+                  Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+                      try {
+                          File(filesDir, reportName).writeText(
+                              "FALHA NATIVA CAPTURADA PELO ANDROID\\n" +
+                              "Thread: ${thread.name}\\n" +
+                              "Tipo: ${error.javaClass.name}\\n" +
+                              "Mensagem: ${error.message}\\n\\n" +
+                              error.stackTraceToString()
+                          )
+                      } catch (_: Throwable) {
+                      }
+                      previousHandler?.uncaughtException(thread, error)
+                  }
+                  super.onCreate(savedInstanceState)
+              }
+
+              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+                  super.configureFlutterEngine(flutterEngine)
+                  MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
+                      .setMethodCallHandler { call, result ->
+                          val report = File(filesDir, reportName)
+                          when (call.method) {
+                              "getLastCrash" -> result.success(
+                                  if (report.exists()) report.readText() else null
+                              )
+                              "clearLastCrash" -> {
+                                  if (report.exists()) report.delete()
+                                  result.success(null)
+                              }
+                              else -> result.notImplemented()
+                          }
+                      }
+              }
+          }
+          KOTLIN
+
       - name: Configure Android manifest
         working-directory: novelplay_v3
         run: |
