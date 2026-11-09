@@ -274,7 +274,7 @@ async function findOrCreateDriveFolder(drive, name, parentId) {
 async function uploadHlsEpisode(drive, sourceUrl, folderId, number) {
   const fileName = 'Episódio ' + String(number).padStart(3, '0') + '.mp4';
   const child = spawn('ffmpeg', [
-    '-hide_banner', '-loglevel', 'error',
+    '-hide_banner', '-nostdin', '-loglevel', 'warning', '-threads', '1',
     '-protocol_whitelist', 'https,tls,tcp,crypto,data',
     '-user_agent', 'NovelPlay/1.0 authorized media transfer',
     '-i', sourceUrl,
