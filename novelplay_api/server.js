@@ -10,7 +10,6 @@ const dns = require('dns').promises;
 const net = require('net');
 const { Readable, Transform } = require('stream');
 const { spawn } = require('child_process');
-const ffmpegPath = require('ffmpeg-static');
 const { google } = require('googleapis');
 
 const app = express();
@@ -273,9 +272,8 @@ async function findOrCreateDriveFolder(drive, name, parentId) {
 }
 
 async function uploadHlsEpisode(drive, sourceUrl, folderId, number) {
-  if (!ffmpegPath) throw new Error('Conversor de vídeo HLS indisponível no servidor.');
   const fileName = 'Episódio ' + String(number).padStart(3, '0') + '.mp4';
-  const child = spawn(ffmpegPath, [
+  const child = spawn('ffmpeg', [
     '-hide_banner', '-loglevel', 'error',
     '-protocol_whitelist', 'https,tls,tcp,crypto,data',
     '-user_agent', 'NovelPlay/1.0 authorized media transfer',
