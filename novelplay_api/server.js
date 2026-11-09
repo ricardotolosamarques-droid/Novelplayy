@@ -280,6 +280,7 @@ async function uploadHlsEpisode(drive, sourceUrl, folderId, number) {
     '-i', sourceUrl,
     '-map', '0:v:0?', '-map', '0:a:0?',
     '-c', 'copy',
+    '-bsf:a', 'aac_adtstoasc',
     '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
     '-f', 'mp4', 'pipe:1'
   ], { stdio: ['ignore', 'pipe', 'pipe'] });
