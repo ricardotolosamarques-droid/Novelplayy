@@ -124,7 +124,14 @@ jobs:
 
       - name: Build release APK
         working-directory: novelplay_v3
-        run: flutter build apk --release
+        env:
+          DRIVE_API_KEY: ${{ secrets.DRIVE_API_KEY }}
+        run: |
+          if [ -z "$DRIVE_API_KEY" ]; then
+            echo "::error::O secret DRIVE_API_KEY não está configurado em Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          flutter build apk --release --dart-define=DRIVE_API_KEY="$DRIVE_API_KEY"
 
       - name: Build diagnostic app with NovelPlay dependencies
         run: |
