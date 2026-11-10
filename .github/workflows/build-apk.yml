@@ -197,6 +197,9 @@ jobs:
           flutter:
             uses-material-design: true
           EOF
+            if [ "$plugin" = "google_mobile_ads" ]; then
+              sed -i '/<application/a\        <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713"/>' "$project/android/app/src/main/AndroidManifest.xml"
+            fi
             cat > "$project/lib/main.dart" <<'DART'
           import 'package:flutter/material.dart';
           void main() {
