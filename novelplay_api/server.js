@@ -336,9 +336,11 @@ async function uploadHlsEpisode(drive, sourceUrl, folderId, number) {
     '-protocol_whitelist', 'https,tls,tcp,crypto,data',
     '-user_agent', 'NovelPlay/1.0 authorized media transfer',
     '-i', hlsSourceUrl,
-    '-map', '0:v:0?', '-map', '0:a:0?',
-    '-c', 'copy',
-    '-bsf:a', 'aac_adtstoasc',
+    // Não envia um arquivo silenciosamente sem áudio: a faixa é obrigatória.
+    '-map', '0:v:0', '-map', '0:a:0',
+    // Mantém o vídeo original (resolução/bitrate/qualidade) e padroniza só o áudio.
+    '-c:v', 'copy',
+    '-c:a', 'aac', '-b:a', '192k',
     '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
     '-f', 'mp4', 'pipe:1'
   ], { stdio: ['ignore', 'pipe', 'pipe'] });
