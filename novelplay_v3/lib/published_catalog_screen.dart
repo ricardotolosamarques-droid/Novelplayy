@@ -125,18 +125,14 @@ class _PublishedCatalogScreenState extends State<PublishedCatalogScreen> {
                 final cover = (item['coverUrl'] ?? '').toString();
                 return Card(
                   clipBehavior: Clip.antiAlias,
-                  child: ExpansionTile(
-                    initiallyExpanded: widget.initialSeriesId != null &&
-                        (item['id'] ?? '').toString() == widget.initialSeriesId,
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     leading: SizedBox(
                       width: 58,
                       height: 76,
                       child: cover.startsWith('https://')
-                          ? Image.network(
-                              cover,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Icon(Icons.movie),
-                            )
+                          ? Image.network(cover, fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Icon(Icons.movie))
                           : const Icon(Icons.movie, size: 36),
                     ),
                     title: Text((item['title'] ?? 'Novelinha').toString()),
@@ -150,34 +146,15 @@ class _PublishedCatalogScreenState extends State<PublishedCatalogScreen> {
                             icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                             onPressed: () => _deleteSeries(item),
                           ),
-                        const Icon(Icons.expand_more),
+                        const Icon(Icons.chevron_right),
                       ],
                     ),
-                    children: [
-                      if ((item['synopsis'] ?? '').toString().isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                          child: Text(item['synopsis'].toString()),
-                        ),
-                      for (final episode in episodes)
-                        ListTile(
-                          leading: CircleAvatar(child: Text('${episode['number'] ?? '?'}')),
-                          title: Text((episode['title'] ?? 'Episódio').toString()),
-                          trailing: const Icon(Icons.play_circle_outline),
-                          onTap: (episode['videoUrl'] ?? '').toString().startsWith('https://')
-                              ? () => Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => _PublishedPlayer(
-                                        seriesTitle: (item['title'] ?? 'Novelinha').toString(),
-                                        episodes: episodes,
-                                        initialIndex: episodes.indexOf(episode),
-                                      ),
-                                    ),
-                                  )
-                              : null,
-                        ),
-                    ],
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => _PublishedSeriesDetails(item: item, episodes: episodes),
+                      ),
+                    ),
                   ),
                 );
               },
@@ -185,6 +162,66 @@ class _PublishedCatalogScreenState extends State<PublishedCatalogScreen> {
           },
         ),
       );
+}
+
+class _PublishedSeriesDetails extends StatelessWidget {
+  final Map<String, dynamic> item;
+  final List<Map<String, dynamic>> episodes;
+
+  const _PublishedSeriesDetails({required this.item, required this.episodes});
+
+  @override
+  Widget build(BuildContext context) {
+    final title = (item['title'] ?? 'Novelinha').toString();
+    final cover = (item['coverUrl'] ?? '').toString();
+    final synopsis = (item['synopsis'] ?? '').toString();
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title),
+        leading: IconButton(
+          tooltip: 'Voltar ao catálogo',
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (cover.startsWith('https://'))
+            Center(child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Image.network(cover, height: 190, fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Icon(Icons.movie, size: 72)),
+            )),
+          const SizedBox(height: 16),
+          Text(title, style: Theme.of(context).textTheme.titleLarge),
+          if (synopsis.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(synopsis, style: const TextStyle(height: 1.45)),
+          ],
+          const SizedBox(height: 22),
+          Text('Episódios (${episodes.length})',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          for (var index = 0; index < episodes.length; index++)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(child: Text('${episodes[index]['number'] ?? index + 1}')),
+              title: Text((episodes[index]['title'] ?? 'Episódio').toString()),
+              trailing: const Icon(Icons.play_circle_outline),
+              onTap: (episodes[index]['videoUrl'] ?? '').toString().startsWith('https://')
+                  ? () => Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => _PublishedPlayer(
+                        seriesTitle: title, episodes: episodes, initialIndex: index)))
+                  : null,
+            ),
+          if (episodes.isEmpty)
+            const Padding(padding: EdgeInsets.all(12),
+              child: Text('Esta novelinha ainda não tem episódios.')),
+        ],
+      ),
+    );
+  }
 }
 
 class _PublishedPlayer extends StatefulWidget {
