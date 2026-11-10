@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 const _publishedCatalogApi = 'https://novelplay-api-ee5f.onrender.com/catalog';
 
@@ -255,6 +256,7 @@ class _PublishedPlayerState extends State<_PublishedPlayer> {
   @override
   void initState() {
     super.initState();
+    WakelockPlus.enable();
     _open();
   }
 
@@ -447,6 +449,7 @@ class _PublishedPlayerState extends State<_PublishedPlayer> {
     _controlsTimer?.cancel();
     _controller?.removeListener(_ended);
     _controller?.dispose();
+    WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.manual,
       overlays: SystemUiOverlay.values,
@@ -481,9 +484,15 @@ class _PublishedPlayerState extends State<_PublishedPlayer> {
                           )
                         : initialized
                             ? GestureDetector(
+                                onVerticalDragEnd: (details) {
+                                  final velocity = details.primaryVelocity ?? 0;
+                                  if (velocity < -250) _next();
+                                  if (velocity > 250) _previous();
+                                },
                                 onHorizontalDragEnd: (details) {
-                                  if ((details.primaryVelocity ?? 0) < -250) _next();
-                                  if ((details.primaryVelocity ?? 0) > 250) _previous();
+                                  final velocity = details.primaryVelocity ?? 0;
+                                  if (velocity < -250) _next();
+                                  if (velocity > 250) _previous();
                                 },
                                 child: AspectRatio(
                                   aspectRatio: player!.value.aspectRatio > 0 ? player.value.aspectRatio : 9 / 16,
