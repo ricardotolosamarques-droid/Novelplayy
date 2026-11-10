@@ -560,7 +560,13 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                                   onTap: () => Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) => PublishedCatalogScreen(initialSeriesId: seriesId),
+                                      builder: (_) => PublishedSeriesDetailsScreen(
+                                        item: item,
+                                        episodes: (item['episodes'] as List? ?? const [])
+                                            .whereType<Map>()
+                                            .map((episode) => Map<String, dynamic>.from(episode))
+                                            .toList(),
+                                      ),
                                     ),
                                   ),
                                   child: Column(
