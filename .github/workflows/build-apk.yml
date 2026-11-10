@@ -147,14 +147,18 @@ jobs:
                   raise SystemExit('Tag manifest não encontrada no AndroidManifest.xml')
               xml = xml[:manifest_end + 1] + '\\n    ' + internet + xml[manifest_end + 1:]
 
-          import re
-          activity = re.search(r'<activity\\b[^>]*android:name="[^"]*MainActivity"[^>]*>', xml)
-          if not activity:
+          marker = 'MainActivity'
+          marker_pos = xml.find(marker)
+          if marker_pos < 0:
               raise SystemExit('Activity MainActivity não encontrada no AndroidManifest.xml')
-          tag = activity.group(0)
+          activity_start = xml.rfind('<activity', 0, marker_pos)
+          activity_end = xml.find('>', marker_pos)
+          if activity_start < 0 or activity_end < 0:
+              raise SystemExit('Tag da activity MainActivity inválida')
+          tag = xml[activity_start:activity_end + 1]
           if 'android:launchMode=' not in tag:
               tag = tag[:-1] + ' android:launchMode="singleTop">'
-          xml = xml[:activity.start()] + tag + xml[activity.end():]
+          xml = xml[:activity_start] + tag + xml[activity_end + 1:]
 
           filters = '''
                   <intent-filter>
