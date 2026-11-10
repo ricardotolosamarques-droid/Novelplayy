@@ -134,6 +134,44 @@ jobs:
         working-directory: novelplay_v3
         run: flutter build apk --release
 
+      - name: Build diagnostic app with NovelPlay dependencies
+        run: |
+          flutter create --platforms=android --org com.example --project-name novelplay_full_diagnostic diagnostic_full
+          cp novelplay_v3/pubspec.yaml diagnostic_full/pubspec.yaml
+          rm -rf diagnostic_full/assets
+          cp -a novelplay_v3/assets diagnostic_full/assets
+          cat > diagnostic_full/lib/main.dart <<'DART'
+          import 'package:flutter/material.dart';
+
+          void main() {
+            WidgetsFlutterBinding.ensureInitialized();
+            runApp(const MaterialApp(
+              debugShowCheckedModeBanner: false,
+              home: Scaffold(
+                backgroundColor: Color(0xff101018),
+                body: Center(
+                  child: Text(
+                    'DIAGNÓSTICO COM DEPENDÊNCIAS DO NOVELPLAY OK',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white, fontSize: 20),
+                  ),
+                ),
+              ),
+            ));
+          }
+          DART
+          cd diagnostic_full
+          flutter pub get
+          flutter build apk --release
+
+      - name: Upload diagnostic app with NovelPlay dependencies
+        uses: actions/upload-artifact@v4
+        with:
+          name: NovelPlay-Dependencies-Diagnostic
+          path: diagnostic_full/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Build minimal Android diagnostic app
         run: |
           flutter create --platforms=android --org com.example --project-name novelplay_diagnostic diagnostic_app
