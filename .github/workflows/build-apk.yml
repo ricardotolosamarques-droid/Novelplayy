@@ -178,7 +178,7 @@ jobs:
                   </intent-filter>
           '''
           if 'android.intent.action.SEND' not in xml:
-              pos = xml.find('</activity>', activity.start())
+              pos = xml.find('</activity>', activity_start)
               if pos < 0:
                   raise SystemExit('Fechamento da activity MainActivity não encontrado')
               xml = xml[:pos] + filters + '\\n            ' + xml[pos:]
