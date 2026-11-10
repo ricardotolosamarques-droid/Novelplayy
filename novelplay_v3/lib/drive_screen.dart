@@ -887,6 +887,7 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
     try {
       player = VideoPlayerController.networkUrl(episode.mediaUri, httpHeaders: episode.resourceHeaders);
       await player.initialize();
+      await player.setVolume(1.0);
       return player;
     } catch (error) {
       apiError = error;
@@ -894,6 +895,7 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
       player = VideoPlayerController.networkUrl(episode.directDownloadUri, httpHeaders: episode.resourceHeaders);
       try {
         await player.initialize();
+        await player.setVolume(1.0);
         return player;
       } catch (fallbackError) {
         await player.dispose();
@@ -951,6 +953,8 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
         if (target > Duration.zero) await player.seekTo(target);
         _restoredInitialPosition = true;
       }
+      // Garante que o áudio do episódio do Drive não fique silenciado.
+      await player.setVolume(1.0);
       player.addListener(_onVideoChanged);
       await player.play();
       // Prepara o próximo vídeo enquanto o atual ainda está tocando.
