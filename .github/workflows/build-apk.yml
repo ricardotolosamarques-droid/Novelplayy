@@ -113,6 +113,12 @@ jobs:
                                   if (report.exists()) report.delete()
                                   result.success(null)
                               }
+                              "getQueuedSharedLinks" -> {
+                                  val queue = File(filesDir, "novelplay_shared_links.txt")
+                                  val shared = if (queue.exists()) queue.readText() else ""
+                                  if (queue.exists()) queue.delete()
+                                  result.success(shared)
+                              }
                               else -> result.notImplemented()
                           }
                       }
@@ -125,6 +131,39 @@ jobs:
                           }
                           else -> result.notImplemented()
                       }
+                  }
+              }
+          }
+          KOTLIN
+
+          cat > android/app/src/main/kotlin/com/example/novelinha_app/ShareReceiverActivity.kt <<'KOTLIN'
+          package com.example.novelinha_app
+
+          import android.app.Activity
+          import android.content.Intent
+          import android.os.Bundle
+          import java.io.File
+
+          class ShareReceiverActivity : Activity() {
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  try {
+                      val shared = intent?.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.trim()
+                      if (!shared.isNullOrEmpty()) {
+                          val queue = File(filesDir, "novelplay_shared_links.txt")
+                          queue.appendText(shared + "\\n")
+                      } else {
+                          val uri = if (android.os.Build.VERSION.SDK_INT >= 33) {
+                              intent?.getParcelableExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java)
+                          } else {
+                              @Suppress("DEPRECATION")
+                              intent?.getParcelableExtra(Intent.EXTRA_STREAM) as? android.net.Uri
+                          }
+                          if (uri != null) File(filesDir, "novelplay_shared_links.txt").appendText(uri.toString() + "\\n")
+                      }
+                  } catch (_: Throwable) {
+                  } finally {
+                      finish()
                   }
               }
           }
@@ -160,7 +199,18 @@ jobs:
               tag = tag[:-1] + ' android:launchMode="singleTop">'
           xml = xml[:activity_start] + tag + xml[activity_end + 1:]
 
-          filters = '''
+          # Receive shares in a tiny translucent activity that saves the link
+          # and closes immediately, instead of launching the Flutter interface.
+          main_close = xml.find('</activity>', activity_start)
+          if main_close < 0:
+              raise SystemExit('Fechamento da MainActivity não encontrado')
+          receiver = '''
+              <activity
+                  android:name=".ShareReceiverActivity"
+                  android:exported="true"
+                  android:excludeFromRecents="true"
+                  android:noHistory="true"
+                  android:theme="@android:style/Theme.Translucent.NoTitleBar">
                   <intent-filter>
                       <action android:name="android.intent.action.SEND" />
                       <category android:name="android.intent.category.DEFAULT" />
@@ -176,13 +226,9 @@ jobs:
                       <category android:name="android.intent.category.DEFAULT" />
                       <data android:mimeType="application/octet-stream" />
                   </intent-filter>
+              </activity>
           '''
-          if 'android.intent.action.SEND' not in xml:
-              pos = xml.find('</activity>', activity_start)
-              if pos < 0:
-                  raise SystemExit('Fechamento da activity MainActivity não encontrado')
-              xml = xml[:pos] + filters + '\\n            ' + xml[pos:]
-
+          xml = xml[:main_close + len('</activity>')] + receiver + xml[main_close + len('</activity>'):]
           import xml.etree.ElementTree as ET
           ET.fromstring(xml)
           path.write_text(xml)
