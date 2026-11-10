@@ -27,13 +27,13 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
     String received = '';
     try {
       received = await const MethodChannel('novelplay/share')
-              .invokeMethod<String>('getQueuedSharedLinks') ??
+              .invokeMethod<String>('getInitialSharedText') ??
           '';
     } catch (_) {}
     final merged = <String>{
-      ...saved.split(RegExp(r'\\s+')).where((value) => value.trim().isNotEmpty),
-      ...received.split(RegExp(r'\\s+')).where((value) => value.trim().isNotEmpty),
-    }.join('\\n');
+      ...saved.split(RegExp(r'\s+')).where((value) => value.trim().isNotEmpty),
+      ...received.split(RegExp(r'\s+')).where((value) => value.trim().isNotEmpty),
+    }.join('\n');
     _links.text = merged;
     if (received.trim().isNotEmpty) await prefs.setString(_queueKey, merged);
     _suggestTitle();
