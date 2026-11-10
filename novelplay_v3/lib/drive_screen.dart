@@ -7,7 +7,6 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'rewarded_ads.dart';
 import 'reelshort_catalog_screen.dart';
 import 'published_catalog_screen.dart';
 
@@ -101,21 +100,14 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
   late Future<List<dynamic>> _content = _loadSeries();
   late Future<List<Map<String, dynamic>>> _publishedCatalogFuture = _loadPublishedCatalog();
   late Future<List<WatchHistoryEntry>> _historyFuture = _loadHistory();
-  Timer? _profileClock;
 
   @override
   void initState() {
     super.initState();
-    _profileClock = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && _bottomIndex == 4 && _selectedFolderId == null) {
-        setState(() {});
-      }
-    });
   }
 
   @override
   void dispose() {
-    _profileClock?.cancel();
     super.dispose();
   }
 
@@ -147,88 +139,40 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
   }
 
 
-  Future<void> _watchAdFromProfile() async {
-    final messenger = ScaffoldMessenger.of(context);
-    final earned = await NovelRewardedAds.watchAdForMoreAccess();
-    if (!mounted) return;
-    setState(() {});
-    messenger.showSnackBar(SnackBar(
-      content: Text(earned
-          ? 'Pronto! Você ganhou mais 30 minutos sem anúncios.'
-          : 'O anúncio não foi concluído. Nenhum tempo foi adicionado.'),
-    ));
-  }
-
   Widget _profilePage() {
-    return FutureBuilder<Duration>(
-      future: NovelRewardedAds.remainingAccess(),
-      builder: (context, snapshot) {
-        final remaining = snapshot.data ?? Duration.zero;
-        final active = remaining > Duration.zero;
-        final hours = remaining.inHours;
-        final minutes = remaining.inMinutes.remainder(60);
-        final seconds = remaining.inSeconds.remainder(60);
-        final timeLabel = active
-            ? hours > 0
-                ? '${hours}h ${minutes.toString().padLeft(2, '0')}min'
-                : '${minutes.toString().padLeft(2, '0')}min ${seconds.toString().padLeft(2, '0')}s'
-            : 'Tempo esgotado';
-        return ListView(
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        const SizedBox(height: 24),
+        const CircleAvatar(
+          radius: 42,
+          backgroundColor: Color(0xff38202a),
+          child: Icon(Icons.person_rounded, size: 48, color: Color(0xffff6b9d)),
+        ),
+        const SizedBox(height: 14),
+        const Center(child: Text('MEU PERFIL', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900))),
+        const SizedBox(height: 26),
+        Container(
           padding: const EdgeInsets.all(20),
-          children: [
-            const SizedBox(height: 24),
-            const CircleAvatar(
-              radius: 42,
-              backgroundColor: Color(0xff38202a),
-              child: Icon(Icons.person_rounded, size: 48, color: Color(0xffff6b9d)),
-            ),
-            const SizedBox(height: 14),
-            const Center(child: Text('MEU PERFIL', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900))),
-            const SizedBox(height: 26),
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
-                gradient: const LinearGradient(colors: [Color(0xff702b59), Color(0xff30203f)]),
-                border: Border.all(color: const Color(0x55ff6b9d)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(children: [
-                    Icon(Icons.timer_outlined, color: Color(0xffff8bb3)),
-                    SizedBox(width: 8),
-                    Text('TEMPO SEM ANÚNCIOS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.7)),
-                  ]),
-                  const SizedBox(height: 15),
-                  Text(timeLabel, style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 7),
-                  Text(
-                    active ? 'Você pode assistir a todas as novelinhas enquanto esse tempo estiver ativo.' : 'Assista a um anúncio para liberar 30 minutos de acesso.',
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                  const SizedBox(height: 18),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _openingSeries ? null : _watchAdFromProfile,
-                      icon: const Icon(Icons.play_circle_fill),
-                      label: const Text('ASSISTIR ANÚNCIO E GANHAR +30 MIN'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xffe51b3e),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 18),
-            const Text('Dica: você pode assistir a vários anúncios para acumular tempo, mesmo antes de o tempo atual acabar.', style: TextStyle(color: Colors.white60, height: 1.4)),
-          ],
-        );
-      },
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            gradient: const LinearGradient(colors: [Color(0xff702b59), Color(0xff30203f)]),
+            border: Border.all(color: const Color(0x55ff6b9d)),
+          ),
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Icon(Icons.check_circle_outline, color: Color(0xffff8bb3)),
+                SizedBox(width: 8),
+                Text('EXPERIÊNCIA SEM ANÚNCIOS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+              ]),
+              SizedBox(height: 12),
+              Text('Assista às suas novelinhas sem interrupções.', style: TextStyle(color: Colors.white70, height: 1.4)),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -352,29 +296,15 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
     );
   }
 
-  Future<void> _openSeries(DriveSeries series) async {
+  void _openSeries(DriveSeries series) {
     if (_openingSeries) return;
     _openingSeries = true;
-    try {
-      if (!widget.isAdmin) {
-        final hasAdFreeAccess = await NovelRewardedAds.ensureAdFreeAccess();
-        if (!hasAdFreeAccess) {
-          throw Exception('Assista ao anúncio completo para liberar 30 minutos sem anúncios. Se o anúncio não carregar, tente novamente mais tarde.');
-        }
-      }
-      if (!mounted) return;
-      setState(() {
-        _selectedFolderId = series.id;
-        _selectedSeriesName = series.name;
-        _content = _loadEpisodes(series.id);
-      });
-    } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Não foi possível desbloquear: ${error.toString().replaceFirst('Exception: ', '')}')),
-      );
-    } finally {
-      _openingSeries = false;
-    }
+    setState(() {
+      _selectedFolderId = series.id;
+      _selectedSeriesName = series.name;
+      _content = _loadEpisodes(series.id);
+    });
+    _openingSeries = false;
   }
 
   void _goBackToSeries() {
