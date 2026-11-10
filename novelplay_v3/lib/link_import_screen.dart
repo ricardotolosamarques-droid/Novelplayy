@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 const _api = 'https://novelplay-api-ee5f.onrender.com';
@@ -22,7 +23,19 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
   void initState() { super.initState(); _loadQueue(); _loadDriveJobs(); }
   Future<void> _loadQueue() async {
     final prefs = await SharedPreferences.getInstance();
-    _links.text = prefs.getString(_queueKey) ?? '';
+    final saved = prefs.getString(_queueKey) ?? '';
+    String received = '';
+    try {
+      received = await const MethodChannel('novelplay/share')
+              .invokeMethod<String>('getQueuedSharedLinks') ??
+          '';
+    } catch (_) {}
+    final merged = <String>{
+      ...saved.split(RegExp(r'\\s+')).where((value) => value.trim().isNotEmpty),
+      ...received.split(RegExp(r'\\s+')).where((value) => value.trim().isNotEmpty),
+    }.join('\\n');
+    _links.text = merged;
+    if (received.trim().isNotEmpty) await prefs.setString(_queueKey, merged);
     _suggestTitle();
     if (mounted) setState(() {});
     await _lookupMetadata();
