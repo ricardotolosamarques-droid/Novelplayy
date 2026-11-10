@@ -153,7 +153,7 @@ class _PublishedCatalogScreenState extends State<PublishedCatalogScreen> {
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => _PublishedSeriesDetails(item: item, episodes: episodes),
+                        builder: (_) => PublishedSeriesDetailsScreen(item: item, episodes: episodes),
                       ),
                     ),
                   ),
@@ -165,11 +165,11 @@ class _PublishedCatalogScreenState extends State<PublishedCatalogScreen> {
       );
 }
 
-class _PublishedSeriesDetails extends StatelessWidget {
+class PublishedSeriesDetailsScreen extends StatelessWidget {
   final Map<String, dynamic> item;
   final List<Map<String, dynamic>> episodes;
 
-  const _PublishedSeriesDetails({required this.item, required this.episodes});
+  const PublishedSeriesDetailsScreen({super.key, required this.item, required this.episodes});
 
   @override
   Widget build(BuildContext context) {
