@@ -326,13 +326,16 @@ async function resolveHighestHlsVariant(sourceUrl) {
 }
 
 async function uploadHlsEpisode(drive, sourceUrl, folderId, number) {
-  const bestSourceUrl = await resolveHighestHlsVariant(sourceUrl);
+  // Preserve the master playlist: some HLS streams keep audio in a separate
+  // EXT-X-MEDIA rendition. Selecting only a video variant drops that audio.
+  // FFmpeg reads the master playlist and can mux its linked audio rendition.
+  const hlsSourceUrl = sourceUrl;
   const fileName = 'Episódio ' + String(number).padStart(3, '0') + '.mp4';
   const child = spawn('ffmpeg', [
     '-hide_banner', '-nostdin', '-loglevel', 'warning', '-threads', '1',
     '-protocol_whitelist', 'https,tls,tcp,crypto,data',
     '-user_agent', 'NovelPlay/1.0 authorized media transfer',
-    '-i', bestSourceUrl,
+    '-i', hlsSourceUrl,
     '-map', '0:v:0?', '-map', '0:a:0?',
     '-c', 'copy',
     '-bsf:a', 'aac_adtstoasc',
