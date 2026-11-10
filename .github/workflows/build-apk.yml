@@ -51,9 +51,26 @@ jobs:
 
           class MainActivity : FlutterActivity() {
               private val channelName = "novelplay/diagnostics"
+              private val shareChannelName = "novelplay/share"
               private val reportName = "novelplay_last_crash.txt"
+              private var initialSharedText: String? = null
+              private var shareChannel: MethodChannel? = null
+
+              private fun sharedTextFrom(intent: android.content.Intent?): String? {
+                  if (intent?.action != android.content.Intent.ACTION_SEND) return null
+                  val text = intent.getCharSequenceExtra(android.content.Intent.EXTRA_TEXT)?.toString()?.trim()
+                  if (!text.isNullOrEmpty()) return text
+                  val stream = if (android.os.Build.VERSION.SDK_INT >= 33) {
+                      intent.getParcelableExtra(android.content.Intent.EXTRA_STREAM, android.net.Uri::class.java)
+                  } else {
+                      @Suppress("DEPRECATION")
+                      intent.getParcelableExtra(android.content.Intent.EXTRA_STREAM) as? android.net.Uri
+                  }
+                  return stream?.toString()
+              }
 
               override fun onCreate(savedInstanceState: Bundle?) {
+                  initialSharedText = sharedTextFrom(intent)
                   val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
                   Thread.setDefaultUncaughtExceptionHandler { thread, error ->
                       try {
@@ -69,6 +86,18 @@ jobs:
                       previousHandler?.uncaughtException(thread, error)
                   }
                   super.onCreate(savedInstanceState)
+              }
+
+              override fun onNewIntent(intent: android.content.Intent) {
+                  super.onNewIntent(intent)
+                  setIntent(intent)
+                  val shared = sharedTextFrom(intent) ?: return
+                  val channel = shareChannel
+                  if (channel != null) {
+                      channel.invokeMethod("sharedText", shared)
+                  } else {
+                      initialSharedText = listOfNotNull(initialSharedText, shared).joinToString("\\n")
+                  }
               }
 
               override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -87,6 +116,16 @@ jobs:
                               else -> result.notImplemented()
                           }
                       }
+                  shareChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, shareChannelName)
+                  shareChannel?.setMethodCallHandler { call, result ->
+                      when (call.method) {
+                          "getInitialSharedText" -> {
+                              result.success(initialSharedText)
+                              initialSharedText = null
+                          }
+                          else -> result.notImplemented()
+                      }
+                  }
               }
           }
           KOTLIN
@@ -108,10 +147,42 @@ jobs:
                   raise SystemExit('Tag manifest não encontrada no AndroidManifest.xml')
               xml = xml[:manifest_end + 1] + '\\n    ' + internet + xml[manifest_end + 1:]
 
+          import re
+          activity = re.search(r'<activity\\b[^>]*android:name="[^"]*MainActivity"[^>]*>', xml)
+          if not activity:
+              raise SystemExit('Activity MainActivity não encontrada no AndroidManifest.xml')
+          tag = activity.group(0)
+          if 'android:launchMode=' not in tag:
+              tag = tag[:-1] + ' android:launchMode="singleTop">'
+          xml = xml[:activity.start()] + tag + xml[activity.end():]
+
+          filters = '''
+                  <intent-filter>
+                      <action android:name="android.intent.action.SEND" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <data android:mimeType="text/plain" />
+                  </intent-filter>
+                  <intent-filter>
+                      <action android:name="android.intent.action.SEND" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <data android:mimeType="video/*" />
+                  </intent-filter>
+                  <intent-filter>
+                      <action android:name="android.intent.action.SEND" />
+                      <category android:name="android.intent.category.DEFAULT" />
+                      <data android:mimeType="application/octet-stream" />
+                  </intent-filter>
+          '''
+          if 'android.intent.action.SEND' not in xml:
+              pos = xml.find('</activity>', activity.start())
+              if pos < 0:
+                  raise SystemExit('Fechamento da activity MainActivity não encontrado')
+              xml = xml[:pos] + filters + '\\n            ' + xml[pos:]
+
           import xml.etree.ElementTree as ET
           ET.fromstring(xml)
           path.write_text(xml)
-          print('AndroidManifest.xml válido; permissões configuradas.')
+          print('AndroidManifest.xml válido; compartilhamento de links do 1DM configurado.')
           PY
 
       - name: Install dependencies
