@@ -551,7 +551,6 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                               final item = published[index - series.length];
                               final title = (item['title'] ?? 'Novelinha').toString();
                               final cover = (item['coverUrl'] ?? '').toString();
-                              final seriesId = (item['id'] ?? '').toString();
                               return Material(
                                 color: const Color(0xff242424),
                                 borderRadius: BorderRadius.circular(5),
