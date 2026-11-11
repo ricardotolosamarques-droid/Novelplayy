@@ -503,11 +503,12 @@ class _DriveRecoveryAdminSectionState extends State<DriveRecoveryAdminSection> {
       final rows = (data['items'] as List? ?? const []).whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e)).toList();
       setState(() {
-        items = rows;
-        final eligible = rows.where((e) => e['hasSourceUrl'] == true &&
-          ['not_checked', 'failed'].contains(e['recoveryStatus']))
-          .map((e) => '${e['id']}').toSet();
-        selected.removeWhere((id) => !eligible.contains(id));
+        // Mostra somente episódios ainda recuperáveis. Os já recuperados
+        // desaparecem da lista após a atualização da prévia.
+        items = rows.where((e) => e['hasSourceUrl'] == true &&
+          ['not_checked', 'failed'].contains(e['recoveryStatus'])).toList();
+        // Toda nova consulta começa sem seleções para evitar lotes acidentais.
+        selected.clear();
         loading = false;
       });
     } catch (e) {
@@ -562,7 +563,7 @@ class _DriveRecoveryAdminSectionState extends State<DriveRecoveryAdminSection> {
           label: Text(loading ? 'Procurando...' : 'Ver episódios recuperáveis'),
         ),
         if (items.isNotEmpty) ...[
-          Text('Encontrados: ${items.length} • Com link original: ${items.where((e) => e['hasSourceUrl'] == true).length}',
+          Text('Episódios ainda recuperáveis: ${items.length} • Já recuperados desaparecem desta lista.',
             style: const TextStyle(color: Colors.white70, fontSize: 12)),
           for (final item in items)
             if (item['hasSourceUrl'] == true &&
@@ -571,8 +572,18 @@ class _DriveRecoveryAdminSectionState extends State<DriveRecoveryAdminSection> {
                 contentPadding: EdgeInsets.zero,
                 value: selected.contains('${item['id']}'),
                 onChanged: running ? null : (value) => setState(() {
-                  if (value == true) { selected.add('${item['id']}'); }
-                  else { selected.remove('${item['id']}'); }
+                  final id = '${item['id']}';
+                  if (value == true) {
+                    if (selected.length >= 100) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Selecione no máximo 100 episódios por vez.')),
+                      );
+                    } else {
+                      selected.add(id);
+                    }
+                  } else {
+                    selected.remove(id);
+                  }
                 }),
                 title: Text('${item['seriesTitle']}'),
                 subtitle: Text('Episódio ${item['episodeNumber']}'),
