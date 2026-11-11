@@ -157,6 +157,18 @@ class NovelAuth {
     if (saved == null) throw Exception('Faça login novamente.');
     return _request('/admin/google-drive/recovery/$jobId', bearer: saved);
   }
+
+  static Future<Map<String, dynamic>> startGoogleDriveVerification() async {
+    final saved = await token();
+    if (saved == null) throw Exception('Faça login novamente.');
+    return _request('/admin/google-drive/verify', bearer: saved, body: {});
+  }
+
+  static Future<Map<String, dynamic>> googleDriveVerificationJob(String jobId) async {
+    final saved = await token();
+    if (saved == null) throw Exception('Faça login novamente.');
+    return _request('/admin/google-drive/verify/$jobId', bearer: saved);
+  }
   static Future<void> deleteSeries(String seriesId) async {
     final saved = await token();
     if (saved == null) throw Exception('Sua sessão terminou. Entre novamente.');
@@ -490,10 +502,11 @@ class DriveRecoveryAdminSection extends StatefulWidget {
 }
 
 class _DriveRecoveryAdminSectionState extends State<DriveRecoveryAdminSection> {
-  bool loading = false, running = false, consulted = false;
-  String? error, progress;
+  bool loading = false, running = false, consulted = false, verifying = false;
+  String? error, progress, verificationProgress;
   List<Map<String, dynamic>> items = [];
   List<Map<String, dynamic>> results = [];
+  List<Map<String, dynamic>> verificationResults = [];
   Map<String, dynamic> diagnostics = {};
   final Set<String> selected = {};
 
@@ -526,6 +539,43 @@ class _DriveRecoveryAdminSectionState extends State<DriveRecoveryAdminSection> {
       });
     } catch (e) {
       if (mounted) setState(() { error = e.toString(); loading = false; consulted = true; });
+    }
+  }
+
+
+  Future<void> _verifyAllDriveVideos() async {
+    if (verifying || running) return;
+    setState(() {
+      verifying = true;
+      error = null;
+      verificationProgress = 'Preparando verificação completa...';
+      verificationResults = [];
+    });
+    try {
+      final started = await NovelAuth.startGoogleDriveVerification();
+      final jobId = '${started['jobId']}';
+      while (mounted) {
+        final state = await NovelAuth.googleDriveVerificationJob(jobId);
+        final rows = (state['results'] as List? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+        setState(() {
+          verificationProgress = 'Verificados: ${state['checked']}/${state['total']} • Certos: ${state['ok']} • Com problemas: ${state['failed']}';
+          verificationResults = rows;
+        });
+        if (['completed', 'completed_with_errors', 'failed'].contains(state['status'])) {
+          if (state['error'] != null) {
+            setState(() => error = '${state['error']}');
+          }
+          break;
+        }
+        await Future<void>.delayed(const Duration(seconds: 3));
+      }
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    } finally {
+      if (mounted) setState(() => verifying = false);
     }
   }
 
@@ -578,7 +628,34 @@ class _DriveRecoveryAdminSectionState extends State<DriveRecoveryAdminSection> {
           style: TextStyle(color: Colors.white70, height: 1.35)),
         const SizedBox(height: 12),
         OutlinedButton.icon(
-          onPressed: loading || running ? null : _preview,
+          onPressed: verifying || running ? null : _verifyAllDriveVideos,
+          icon: verifying ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.verified_outlined),
+          label: Text(verifying ? 'Verificando vídeos...' : 'Verificar todos os vídeos no Drive'),
+        ),
+        if (verificationProgress != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(verificationProgress!, style: const TextStyle(color: Colors.lightGreenAccent)),
+          ),
+        if (verificationResults.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          const Text('Resultado da verificação', style: TextStyle(fontWeight: FontWeight.bold)),
+          for (final item in verificationResults)
+            ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                item['status'] == 'ok' ? Icons.check_circle : Icons.error,
+                color: item['status'] == 'ok' ? Colors.greenAccent : Colors.redAccent,
+              ),
+              title: Text('${item['seriesTitle']} • Episódio ${item['episodeNumber']}'),
+              subtitle: Text('${item['message'] ?? 'Verificação concluída'}',
+                style: TextStyle(color: item['status'] == 'ok' ? Colors.white60 : Colors.redAccent)),
+            ),
+        ],
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: loading || running || verifying ? null : _preview,
           icon: loading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.search),
           label: Text(loading ? 'Procurando...' : 'Ver episódios recuperáveis'),
         ),
