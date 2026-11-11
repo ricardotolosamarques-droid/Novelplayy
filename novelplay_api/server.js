@@ -636,7 +636,7 @@ app.get('/admin/google-drive/recovery/preview', authRequired, adminRequired, asy
 app.post('/admin/google-drive/recovery', authRequired, adminRequired, async (req, res) => {
   const episodeIds = Array.isArray(req.body.episodeIds) ? req.body.episodeIds : [];
   if (!episodeIds.length || episodeIds.length > 100 ||
-      episodeIds.some(id => !/^\\d+$/.test(String(id)))) {
+      episodeIds.some(id => !/^\d+$/.test(String(id)))) {
     return res.status(400).json({ error: 'Selecione de 1 a 100 episódios válidos.' });
   }
   const ids = Array.from(new Set(episodeIds.map(String)));
