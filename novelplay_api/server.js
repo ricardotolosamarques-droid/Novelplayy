@@ -102,12 +102,12 @@ async function initializeDatabase() {
   await pool.query("ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_upload_status TEXT NOT NULL DEFAULT 'not_started'");
   await pool.query("ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_upload_error TEXT NOT NULL DEFAULT ''");
   await pool.query("ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_recovery_status TEXT NOT NULL DEFAULT 'not_checked'");
-  // Marca como já processados os envios criados depois da correção de áudio publicada.
-  await pool.query("UPDATE catalog_episodes e SET drive_recovery_status = 'not_needed' FROM catalog_drive_upload_jobs j WHERE e.drive_upload_job_id = j.id AND j.created_at >= TIMESTAMPTZ '2026-11-10T20:29:51Z' AND e.drive_recovery_status = 'not_checked'");
   await pool.query("ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_recovery_error TEXT NOT NULL DEFAULT ''");
   await pool.query('ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_recovery_job_id UUID');
   await pool.query("CREATE TABLE IF NOT EXISTS catalog_drive_recovery_jobs (id UUID PRIMARY KEY, status VARCHAR(32) NOT NULL DEFAULT 'queued', total_episodes INTEGER NOT NULL DEFAULT 0, completed_episodes INTEGER NOT NULL DEFAULT 0, failed_episodes INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
   await pool.query('CREATE TABLE IF NOT EXISTS catalog_drive_upload_jobs (id UUID PRIMARY KEY, series_id BIGINT NOT NULL REFERENCES catalog_series(id) ON DELETE CASCADE, status VARCHAR(32) NOT NULL DEFAULT \'queued\', total_episodes INTEGER NOT NULL DEFAULT 0, completed_episodes INTEGER NOT NULL DEFAULT 0, failed_episodes INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');
+  // Marca como já processados os envios criados depois da correção de áudio publicada.
+  await pool.query("UPDATE catalog_episodes e SET drive_recovery_status = 'not_needed' FROM catalog_drive_upload_jobs j WHERE e.drive_upload_job_id = j.id AND j.created_at >= TIMESTAMPTZ '2026-11-10T20:29:51Z' AND e.drive_recovery_status = 'not_checked'");
 
   const adminUsername = (process.env.ADMIN_USERNAME || 'Admin').trim();
   const adminEmail = (process.env.ADMIN_EMAIL || 'admin@novelplay.local').trim().toLowerCase();
