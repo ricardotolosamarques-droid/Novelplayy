@@ -607,6 +607,138 @@ async function processDriveRecoveryJob(jobId) {
   }
 }
 
+
+const driveVerificationJobs = new Map();
+
+async function verifyDriveEpisode(drive, episode) {
+  const fileId = String(episode.drive_file_id || '').trim();
+  if (!fileId) throw new Error('ID do arquivo do Drive ausente.');
+  const metadataResponse = await drive.files.get({
+    fileId,
+    fields: 'id,name,mimeType,size,trashed,videoMediaMetadata'
+  });
+  const metadata = metadataResponse.data || {};
+  if (metadata.trashed) throw new Error('O arquivo está na lixeira do Google Drive.');
+  if (metadata.mimeType !== 'video/mp4') {
+    throw new Error('Tipo incorreto no Drive: ' + String(metadata.mimeType || 'desconhecido') + '. Esperado video/mp4.');
+  }
+  if (!Number(metadata.size || 0)) throw new Error('O arquivo aparece vazio no Google Drive.');
+  if (!metadata.videoMediaMetadata || !Number(metadata.videoMediaMetadata.durationMillis || 0)) {
+    throw new Error('O Google Drive não reconheceu a duração do vídeo.');
+  }
+
+  // Baixa o conteúdo do Drive e decodifica vídeo E áudio. A verificação não
+  // altera nem substitui o arquivo; ela só confirma que as duas faixas podem
+  // ser lidas integralmente pelo FFmpeg.
+  const mediaResponse = await drive.files.get(
+    { fileId, alt: 'media' },
+    { responseType: 'stream' }
+  );
+  const child = spawn('ffmpeg', [
+    '-hide_banner', '-nostdin', '-v', 'error',
+    '-i', 'pipe:0',
+    '-map', '0:v:0', '-map', '0:a:0',
+    '-f', 'null', '-'
+  ], { stdio: ['pipe', 'ignore', 'pipe'] });
+  let stderr = '';
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-6000); });
+  const closePromise = new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (exitCode, signal) => {
+      if (exitCode === 0) resolve();
+      else reject(new Error(stderr.trim() || ('FFmpeg não conseguiu validar as faixas de áudio e vídeo (código ' + exitCode + (signal ? ', ' + signal : '') + ').')));
+    });
+  });
+  mediaResponse.data.on('error', error => child.stdin.destroy(error));
+  mediaResponse.data.pipe(child.stdin);
+  try {
+    await closePromise;
+  } catch (error) {
+    child.kill('SIGKILL');
+    throw error;
+  }
+  return {
+    status: 'ok',
+    fileName: metadata.name || '',
+    mimeType: metadata.mimeType,
+    size: Number(metadata.size),
+    durationMillis: Number(metadata.videoMediaMetadata.durationMillis),
+    hasVideo: true,
+    hasAudio: true
+  };
+}
+
+async function processDriveVerificationJob(jobId) {
+  const job = driveVerificationJobs.get(jobId);
+  if (!job) return;
+  job.status = 'running';
+  try {
+    const result = await pool.query(
+      'SELECT e.id, s.title AS series_title, e.episode_number, e.drive_file_id FROM catalog_episodes e JOIN catalog_series s ON s.id = e.series_id WHERE NULLIF(BTRIM(e.drive_file_id), \\'\\') IS NOT NULL ORDER BY s.title, e.episode_number'
+    );
+    job.total = result.rows.length;
+    const drive = await googleDriveClient();
+    for (const episode of result.rows) {
+      const item = {
+        id: String(episode.id),
+        seriesTitle: episode.series_title,
+        episodeNumber: episode.episode_number
+      };
+      try {
+        const checked = await verifyDriveEpisode(drive, episode);
+        job.ok++;
+        job.results.push({ ...item, ...checked, message: 'Vídeo e áudio íntegros.' });
+      } catch (error) {
+        job.failed++;
+        job.results.push({
+          ...item,
+          status: 'failed',
+          message: String(error.message || 'Falha ao verificar o vídeo.').slice(0, 500)
+        });
+      }
+      job.checked++;
+      job.updatedAt = new Date().toISOString();
+    }
+    job.status = job.failed ? 'completed_with_errors' : 'completed';
+  } catch (error) {
+    job.status = 'failed';
+    job.error = String(error.message || 'Não foi possível verificar o Google Drive.').slice(0, 500);
+  }
+  job.updatedAt = new Date().toISOString();
+}
+
+app.post('/admin/google-drive/verify', authRequired, adminRequired, async (_req, res) => {
+  try {
+    const connected = await pool.query('SELECT id FROM google_drive_credentials WHERE id = 1');
+    if (!connected.rowCount) return res.status(409).json({ error: 'Conecte o Google Drive antes de verificar os vídeos.' });
+    const active = Array.from(driveVerificationJobs.values()).find(job =>
+      ['queued', 'running'].includes(job.status));
+    if (active) return res.status(409).json({ error: 'Já existe uma verificação em andamento.', jobId: active.id });
+    const id = crypto.randomUUID();
+    driveVerificationJobs.set(id, {
+      id, status: 'queued', total: 0, checked: 0, ok: 0, failed: 0,
+      results: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    });
+    setImmediate(() => processDriveVerificationJob(id));
+    return res.status(202).json({ jobId: id, status: 'queued' });
+  } catch (error) {
+    console.error('Erro ao iniciar verificação do Google Drive:', error.message);
+    return res.status(500).json({ error: 'Não foi possível iniciar a verificação dos vídeos.' });
+  }
+});
+
+app.get('/admin/google-drive/verify/:jobId', authRequired, adminRequired, async (req, res) => {
+  const id = String(req.params.jobId || '');
+  const job = driveVerificationJobs.get(id);
+  if (!job) return res.status(404).json({ error: 'Verificação não encontrada. Se o servidor reiniciou, inicie uma nova verificação.' });
+  return res.json({
+    jobId: job.id, status: job.status, total: job.total, checked: job.checked,
+    ok: job.ok, failed: job.failed, error: job.error || null,
+    updatedAt: job.updatedAt, results: job.results
+  });
+});
+
 app.get('/admin/google-drive/recovery/preview', authRequired, adminRequired, async (_req, res) => {
   try {
     // Diagnóstico inclui todos os episódios, não apenas os já marcados como recuperáveis.
