@@ -490,11 +490,19 @@ class DriveRecoveryAdminSection extends StatefulWidget {
 }
 
 class _DriveRecoveryAdminSectionState extends State<DriveRecoveryAdminSection> {
-  bool loading = false, running = false;
+  bool loading = false, running = false, consulted = false;
   String? error, progress;
   List<Map<String, dynamic>> items = [];
   List<Map<String, dynamic>> results = [];
   final Set<String> selected = {};
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _preview();
+    });
+  }
 
   Future<void> _preview() async {
     setState(() { loading = true; error = null; });
@@ -512,9 +520,10 @@ class _DriveRecoveryAdminSectionState extends State<DriveRecoveryAdminSection> {
         selected.clear();
         results = [];
         loading = false;
+        consulted = true;
       });
     } catch (e) {
-      if (mounted) setState(() { error = e.toString(); loading = false; });
+      if (mounted) setState(() { error = e.toString(); loading = false; consulted = true; });
     }
   }
 
@@ -605,8 +614,10 @@ class _DriveRecoveryAdminSectionState extends State<DriveRecoveryAdminSection> {
             label: Text(running ? 'Recuperando...' : 'Recuperar selecionados (${selected.length})'),
             style: FilledButton.styleFrom(backgroundColor: const Color(0xffff6b9d)),
           ),
-        ] else if (!loading && error == null)
-          const Text('A lista ainda não foi consultada.', style: TextStyle(color: Colors.white60)),
+        ] else if (!loading && error == null && consulted)
+          const Text('Nenhum episódio disponível para recuperação foi encontrado.', style: TextStyle(color: Colors.white60)),
+        else if (!loading && !consulted)
+          const Text('A consulta da lista ainda não começou.', style: TextStyle(color: Colors.white60)),
         if (progress != null) Padding(
           padding: const EdgeInsets.only(top: 10),
           child: Text(progress!, style: const TextStyle(color: Colors.lightGreenAccent)),
