@@ -636,30 +636,55 @@ app.get('/admin/google-drive/recovery/preview', authRequired, adminRequired, asy
 app.post('/admin/google-drive/recovery', authRequired, adminRequired, async (req, res) => {
   const episodeIds = Array.isArray(req.body.episodeIds) ? req.body.episodeIds : [];
   if (!episodeIds.length || episodeIds.length > 100 ||
-      episodeIds.some(id => !/^\d+$/.test(String(id)))) {
+      episodeIds.some(id => !/^\\d+$/.test(String(id)))) {
     return res.status(400).json({ error: 'Selecione de 1 a 100 episódios válidos.' });
   }
+  const ids = Array.from(new Set(episodeIds.map(String)));
   try {
     const connected = await pool.query('SELECT id FROM google_drive_credentials WHERE id = 1');
     if (!connected.rowCount) return res.status(409).json({ error: 'Conecte o Google Drive antes de recuperar episódios.' });
-    const ids = Array.from(new Set(episodeIds.map(String)));
-    const eligible = await pool.query(
-      "SELECT id FROM catalog_episodes WHERE id = ANY($1::bigint[]) AND drive_file_id IS NOT NULL AND drive_file_id <> '' AND video_url <> '' AND drive_recovery_status IN ('not_checked', 'failed')",
-      [ids]
-    );
-    if (eligible.rowCount !== ids.length) {
-      return res.status(409).json({ error: 'Um ou mais episódios não têm link original/arquivo no Drive, já foram recuperados ou estão em processamento. Atualize a prévia.' });
+
+    // Revalida cada item no banco e bloqueia as linhas durante a criação do lote.
+    // Itens sem origem/arquivo, já recuperados ou em processamento são ignorados,
+    // em vez de impedir a recuperação dos demais episódios selecionados.
+    const client = await pool.connect();
+    let jobId;
+    let eligibleIds = [];
+    try {
+      await client.query('BEGIN');
+      const eligible = await client.query(
+        "SELECT id FROM catalog_episodes WHERE id = ANY($1::bigint[]) AND NULLIF(BTRIM(drive_file_id), '') IS NOT NULL AND NULLIF(BTRIM(video_url), '') IS NOT NULL AND drive_recovery_status IN ('not_checked', 'failed') ORDER BY id FOR UPDATE",
+        [ids]
+      );
+      eligibleIds = eligible.rows.map(row => String(row.id));
+      const skipped = ids.length - eligibleIds.length;
+      if (!eligibleIds.length) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          error: 'Nenhum dos episódios selecionados ainda está disponível para recuperação. Consulte novamente a lista de episódios recuperáveis.',
+          skipped
+        });
+      }
+
+      jobId = crypto.randomUUID();
+      await client.query(
+        "INSERT INTO catalog_drive_recovery_jobs (id, status, total_episodes) VALUES ($1, 'queued', $2)",
+        [jobId, eligibleIds.length]
+      );
+      await client.query(
+        "UPDATE catalog_episodes SET drive_recovery_status = 'queued', drive_recovery_error = '', drive_recovery_job_id = $2 WHERE id = ANY($1::bigint[])",
+        [eligibleIds, jobId]
+      );
+      await client.query('COMMIT');
+      res.status(202).json({
+        jobId, status: 'queued', total: eligibleIds.length, skipped
+      });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
     }
-    const jobId = crypto.randomUUID();
-    await pool.query(
-      "INSERT INTO catalog_drive_recovery_jobs (id, status, total_episodes) VALUES ($1, 'queued', $2)",
-      [jobId, ids.length]
-    );
-    await pool.query(
-      "UPDATE catalog_episodes SET drive_recovery_status = 'queued', drive_recovery_error = '', drive_recovery_job_id = $2 WHERE id = ANY($1::bigint[])",
-      [ids, jobId]
-    );
-    res.status(202).json({ jobId, status: 'queued', total: ids.length });
     setImmediate(() => processDriveRecoveryJob(jobId));
   } catch (error) {
     console.error('Erro ao iniciar recuperação do Drive:', error.message);
