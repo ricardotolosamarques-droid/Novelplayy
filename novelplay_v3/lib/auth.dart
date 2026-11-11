@@ -616,11 +616,20 @@ class _DriveRecoveryAdminSectionState extends State<DriveRecoveryAdminSection> {
             label: Text(running ? 'Recuperando...' : 'Recuperar selecionados (${selected.length})'),
             style: FilledButton.styleFrom(backgroundColor: const Color(0xffff6b9d)),
           ),
-        ] else if (!loading && error == null)
+        ] else if (!loading && error == null) ...[
           Text(consulted
               ? 'Nenhum episódio disponível para recuperação foi encontrado.'
               : 'A consulta da lista ainda não começou.',
             style: const TextStyle(color: Colors.white60)),
+          if (consulted && diagnostics.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Diagnóstico: ${diagnostics['totalWithDriveFile'] ?? 0} episódios com arquivo no Drive; '
+              '${diagnostics['eligible'] ?? 0} elegíveis; '
+              '${diagnostics['missingSource'] ?? 0} sem link original; '
+              '${diagnostics['ignoredStatus'] ?? 0} ignorados por status.',
+              style: const TextStyle(color: Colors.white60, fontSize: 12)),
+          ],
+        ],
         if (progress != null) Padding(
           padding: const EdgeInsets.only(top: 10),
           child: Text(progress!, style: const TextStyle(color: Colors.lightGreenAccent)),
