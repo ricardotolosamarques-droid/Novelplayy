@@ -553,7 +553,7 @@ class _DriveRecoveryAdminSectionState extends State<DriveRecoveryAdminSection> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const Text('Recuperar episódios antigos', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
-        const Text('Procura episódios enviados pelo NovelPlay que ainda têm o link original salvo. A recuperação atualiza o arquivo existente no Drive, sem criar outra cópia.',
+        const Text('Procura episódios antigos enviados pelo NovelPlay que ainda têm o link original salvo. Os envios feitos depois da correção de áudio são ignorados. A recuperação atualiza o arquivo existente no Drive, sem criar outra cópia. Teste primeiro com apenas um episódio.',
           style: TextStyle(color: Colors.white70, height: 1.35)),
         const SizedBox(height: 12),
         OutlinedButton.icon(
