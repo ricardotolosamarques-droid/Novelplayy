@@ -102,6 +102,8 @@ async function initializeDatabase() {
   await pool.query("ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_upload_status TEXT NOT NULL DEFAULT 'not_started'");
   await pool.query("ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_upload_error TEXT NOT NULL DEFAULT ''");
   await pool.query("ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_recovery_status TEXT NOT NULL DEFAULT 'not_checked'");
+  // Marca como já processados os envios criados depois da correção de áudio publicada.
+  await pool.query("UPDATE catalog_episodes e SET drive_recovery_status = 'not_needed' FROM catalog_drive_upload_jobs j WHERE e.drive_upload_job_id = j.id AND j.created_at >= TIMESTAMPTZ '2026-11-10T20:29:51Z' AND e.drive_recovery_status = 'not_checked'");
   await pool.query("ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_recovery_error TEXT NOT NULL DEFAULT ''");
   await pool.query('ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_recovery_job_id UUID');
   await pool.query("CREATE TABLE IF NOT EXISTS catalog_drive_recovery_jobs (id UUID PRIMARY KEY, status VARCHAR(32) NOT NULL DEFAULT 'queued', total_episodes INTEGER NOT NULL DEFAULT 0, completed_episodes INTEGER NOT NULL DEFAULT 0, failed_episodes INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
@@ -464,7 +466,7 @@ async function processDriveUploadJob(jobId) {
       try {
         const file = await downloadAndUploadEpisode(drive, episode.video_url, seriesFolder, episode.episode_number);
         await pool.query(
-          "UPDATE catalog_episodes SET drive_file_id = $2, drive_web_view_link = $3, drive_upload_status = 'uploaded', drive_upload_error = '' WHERE id = $1",
+          "UPDATE catalog_episodes SET drive_file_id = $2, drive_web_view_link = $3, drive_upload_status = 'uploaded', drive_upload_error = '', drive_recovery_status = 'not_needed', drive_recovery_error = '' WHERE id = $1",
           [episode.id, file.id, file.webViewLink || '']
         );
         await pool.query("UPDATE catalog_drive_upload_jobs SET completed_episodes = completed_episodes + 1, updated_at = NOW() WHERE id = $1", [jobId]);
@@ -606,6 +608,7 @@ app.get('/admin/google-drive/recovery/preview', authRequired, adminRequired, asy
       FROM catalog_episodes e
       JOIN catalog_series s ON s.id = e.series_id
       WHERE e.drive_file_id IS NOT NULL AND e.drive_file_id <> ''
+        AND e.drive_recovery_status IN ('not_checked', 'failed')
       ORDER BY s.title, e.episode_number
       LIMIT 500
     `);
