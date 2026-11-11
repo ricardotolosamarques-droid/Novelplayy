@@ -546,7 +546,14 @@ async function replaceDriveFileFromSource(drive, sourceUrl, fileId, number) {
       fields: 'id,name,mimeType,size,webViewLink'
     });
     const [updated] = await Promise.all([updatePromise, closePromise]);
-    return updated.data;
+    const metadata = updated.data || {};
+    if (metadata.mimeType !== 'video/mp4' || !(Number(metadata.size) > 0)) {
+      throw new Error('O Google Drive não confirmou um vídeo MP4 válido após a substituição.');
+    }
+    // O mapeamento obrigatório -map 0:a:0 acima faz o FFmpeg falhar se a origem
+    // não tiver faixa de áudio; só marcamos como recuperado após a conversão
+    // terminar e o Drive confirmar o arquivo atualizado.
+    return metadata;
   } catch (error) {
     child.kill('SIGKILL');
     limitedOutput.destroy();
@@ -702,10 +709,25 @@ app.get('/admin/google-drive/recovery/:jobId', authRequired, adminRequired, asyn
     );
     if (!result.rowCount) return res.status(404).json({ error: 'Lote de recuperação não encontrado.' });
     const row = result.rows[0];
+    const episodeResults = await pool.query(
+      `SELECT s.title AS series_title, e.episode_number,
+              e.drive_recovery_status, e.drive_recovery_error
+       FROM catalog_episodes e
+       JOIN catalog_series s ON s.id = e.series_id
+       WHERE e.drive_recovery_job_id = $1
+       ORDER BY s.title, e.episode_number`,
+      [jobId]
+    );
     return res.json({
       jobId: row.id, status: row.status, total: row.total_episodes,
       recovered: row.completed_episodes, failed: row.failed_episodes,
-      pending: Math.max(0, row.total_episodes - row.completed_episodes - row.failed_episodes)
+      pending: Math.max(0, row.total_episodes - row.completed_episodes - row.failed_episodes),
+      episodes: episodeResults.rows.map(item => ({
+        seriesTitle: item.series_title,
+        episodeNumber: item.episode_number,
+        status: item.drive_recovery_status,
+        error: item.drive_recovery_error || ''
+      }))
     });
   } catch (error) {
     console.error('Erro ao consultar lote de recuperação:', error.message);
