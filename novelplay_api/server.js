@@ -675,7 +675,7 @@ async function processDriveVerificationJob(jobId) {
   job.status = 'running';
   try {
     const result = await pool.query(
-      'SELECT e.id, s.title AS series_title, e.episode_number, e.drive_file_id FROM catalog_episodes e JOIN catalog_series s ON s.id = e.series_id WHERE NULLIF(BTRIM(e.drive_file_id), \\'\\') IS NOT NULL ORDER BY s.title, e.episode_number'
+      'SELECT e.id, s.title AS series_title, e.episode_number, e.drive_file_id FROM catalog_episodes e JOIN catalog_series s ON s.id = e.series_id WHERE LENGTH(BTRIM(COALESCE(e.drive_file_id, CHR(32)))) > 0 ORDER BY s.title, e.episode_number'
     );
     job.total = result.rows.length;
     const drive = await googleDriveClient();
