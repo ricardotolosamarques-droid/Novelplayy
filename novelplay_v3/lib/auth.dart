@@ -494,6 +494,7 @@ class _DriveRecoveryAdminSectionState extends State<DriveRecoveryAdminSection> {
   String? error, progress;
   List<Map<String, dynamic>> items = [];
   List<Map<String, dynamic>> results = [];
+  Map<String, dynamic> diagnostics = {};
   final Set<String> selected = {};
 
   @override
@@ -516,6 +517,7 @@ class _DriveRecoveryAdminSectionState extends State<DriveRecoveryAdminSection> {
         // desaparecem da lista após a atualização da prévia.
         items = rows.where((e) => e['hasSourceUrl'] == true &&
           ['not_checked', 'failed'].contains(e['recoveryStatus'])).toList();
+        diagnostics = Map<String, dynamic>.from(data);
         // Toda nova consulta começa sem seleções para evitar lotes acidentais.
         selected.clear();
         results = [];
