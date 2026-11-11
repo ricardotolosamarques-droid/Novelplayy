@@ -609,29 +609,35 @@ async function processDriveRecoveryJob(jobId) {
 
 app.get('/admin/google-drive/recovery/preview', authRequired, adminRequired, async (_req, res) => {
   try {
+    // Diagnóstico inclui todos os episódios, não apenas os já marcados como recuperáveis.
     const result = await pool.query(`
       SELECT e.id, s.title AS series_title, e.episode_number, e.drive_file_id,
              e.video_url, e.drive_recovery_status, e.drive_recovery_error
       FROM catalog_episodes e
       JOIN catalog_series s ON s.id = e.series_id
-      WHERE e.drive_file_id IS NOT NULL AND e.drive_file_id <> ''
-        AND e.drive_recovery_status IN ('not_checked', 'failed')
+      WHERE NULLIF(BTRIM(e.drive_file_id), '') IS NOT NULL
       ORDER BY s.title, e.episode_number
-      LIMIT 500
+      LIMIT 1000
     `);
     const items = result.rows.map(row => ({
       id: String(row.id),
       seriesTitle: row.series_title,
       episodeNumber: row.episode_number,
-      hasSourceUrl: Boolean(row.video_url),
-      recoveryStatus: row.drive_recovery_status,
+      hasDriveFile: Boolean(String(row.drive_file_id || '').trim()),
+      hasSourceUrl: Boolean(String(row.video_url || '').trim()),
+      recoveryStatus: row.drive_recovery_status || 'not_checked',
       recoveryError: row.drive_recovery_error || ''
     }));
+    const eligible = items.filter(item => item.hasSourceUrl &&
+      ['not_checked', 'failed'].includes(item.recoveryStatus));
     return res.json({
       items,
-      eligible: items.filter(item => item.hasSourceUrl && ['not_checked', 'failed'].includes(item.recoveryStatus)).length,
+      totalWithDriveFile: items.length,
+      eligible: eligible.length,
       missingSource: items.filter(item => !item.hasSourceUrl).length,
       recovered: items.filter(item => item.recoveryStatus === 'recovered').length,
+      ignoredStatus: items.filter(item =>
+        !['not_checked', 'failed', 'recovered'].includes(item.recoveryStatus)).length,
       failed: items.filter(item => item.recoveryStatus === 'failed').length
     });
   } catch (error) {
