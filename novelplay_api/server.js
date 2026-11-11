@@ -635,7 +635,7 @@ async function verifyDriveEpisode(drive, episode) {
     { responseType: 'stream' }
   );
   const child = spawn('ffmpeg', [
-    '-hide_banner', '-nostdin', '-v', 'error',
+    '-hide_banner', '-nostdin', '-v', 'error', '-xerror',
     '-i', 'pipe:0',
     '-map', '0:v:0', '-map', '0:a:0',
     '-f', 'null', '-'
