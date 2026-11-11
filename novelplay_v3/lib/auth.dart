@@ -493,6 +493,7 @@ class _DriveRecoveryAdminSectionState extends State<DriveRecoveryAdminSection> {
   bool loading = false, running = false;
   String? error, progress;
   List<Map<String, dynamic>> items = [];
+  List<Map<String, dynamic>> results = [];
   final Set<String> selected = {};
 
   Future<void> _preview() async {
@@ -509,6 +510,7 @@ class _DriveRecoveryAdminSectionState extends State<DriveRecoveryAdminSection> {
           ['not_checked', 'failed'].contains(e['recoveryStatus'])).toList();
         // Toda nova consulta começa sem seleções para evitar lotes acidentais.
         selected.clear();
+        results = [];
         loading = false;
       });
     } catch (e) {
@@ -534,7 +536,14 @@ class _DriveRecoveryAdminSectionState extends State<DriveRecoveryAdminSection> {
       final jobId = '${started['jobId']}';
       while (mounted) {
         final state = await NovelAuth.googleDriveRecoveryJob(jobId);
-        setState(() => progress = 'Recuperados: ${state['recovered']}/${state['total']} • Falhas: ${state['failed']} • Pendentes: ${state['pending']}');
+        final episodeResults = (state['episodes'] as List? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+        setState(() {
+          progress = 'Recuperados: ${state['recovered']}/${state['total']} • Falhas: ${state['failed']} • Pendentes: ${state['pending']}';
+          results = episodeResults;
+        });
         if (['completed', 'completed_with_errors', 'failed'].contains(state['status'])) break;
         await Future<void>.delayed(const Duration(seconds: 5));
       }
@@ -602,6 +611,28 @@ class _DriveRecoveryAdminSectionState extends State<DriveRecoveryAdminSection> {
           padding: const EdgeInsets.only(top: 10),
           child: Text(progress!, style: const TextStyle(color: Colors.lightGreenAccent)),
         ),
+        if (results.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          const Text('Resultado automático por episódio', style: TextStyle(fontWeight: FontWeight.bold)),
+          for (final item in results)
+            ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                item['status'] == 'recovered' ? Icons.check_circle
+                  : item['status'] == 'failed' ? Icons.error
+                  : Icons.hourglass_top,
+                color: item['status'] == 'recovered' ? Colors.greenAccent
+                  : item['status'] == 'failed' ? Colors.redAccent
+                  : Colors.orangeAccent,
+              ),
+              title: Text('${item['seriesTitle']} • Episódio ${item['episodeNumber']}'),
+              subtitle: item['status'] == 'failed' && '${item['error']}'.isNotEmpty
+                  ? Text('${item['error']}', style: const TextStyle(color: Colors.redAccent))
+                  : Text(item['status'] == 'recovered' ? 'Arquivo MP4 atualizado e áudio incluído na conversão'
+                      : item['status'] == 'failed' ? 'Falha na recuperação' : 'Em processamento'),
+            ),
+        ],
         if (error != null) Padding(
           padding: const EdgeInsets.only(top: 10),
           child: Text(error!, style: const TextStyle(color: Colors.redAccent)),
