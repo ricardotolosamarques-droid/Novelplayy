@@ -101,6 +101,10 @@ async function initializeDatabase() {
   await pool.query('ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_web_view_link TEXT');
   await pool.query("ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_upload_status TEXT NOT NULL DEFAULT 'not_started'");
   await pool.query("ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_upload_error TEXT NOT NULL DEFAULT ''");
+  await pool.query("ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_recovery_status TEXT NOT NULL DEFAULT 'not_checked'");
+  await pool.query("ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_recovery_error TEXT NOT NULL DEFAULT ''");
+  await pool.query('ALTER TABLE catalog_episodes ADD COLUMN IF NOT EXISTS drive_recovery_job_id UUID');
+  await pool.query("CREATE TABLE IF NOT EXISTS catalog_drive_recovery_jobs (id UUID PRIMARY KEY, status VARCHAR(32) NOT NULL DEFAULT 'queued', total_episodes INTEGER NOT NULL DEFAULT 0, completed_episodes INTEGER NOT NULL DEFAULT 0, failed_episodes INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
   await pool.query('CREATE TABLE IF NOT EXISTS catalog_drive_upload_jobs (id UUID PRIMARY KEY, series_id BIGINT NOT NULL REFERENCES catalog_series(id) ON DELETE CASCADE, status VARCHAR(32) NOT NULL DEFAULT \'queued\', total_episodes INTEGER NOT NULL DEFAULT 0, completed_episodes INTEGER NOT NULL DEFAULT 0, failed_episodes INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');
 
   const adminUsername = (process.env.ADMIN_USERNAME || 'Admin').trim();
@@ -490,6 +494,196 @@ async function processDriveUploadJob(jobId) {
     ).catch(() => {});
   }
 }
+
+
+/*
+ * Recupera arquivos já existentes no Drive. O arquivo é atualizado pelo ID,
+ * portanto o link compartilhado permanece o mesmo; o vídeo é copiado sem
+ * reencodificação e somente o áudio é convertido para AAC.
+ */
+async function replaceDriveFileFromSource(drive, sourceUrl, fileId, number) {
+  await assertPublicHttpsUrl(sourceUrl);
+  const child = spawn('ffmpeg', [
+    '-hide_banner', '-nostdin', '-loglevel', 'warning', '-threads', '1',
+    '-protocol_whitelist', 'https,http,tls,tcp,crypto,data',
+    '-user_agent', 'NovelPlay/1.0 authorized media transfer',
+    '-i', sourceUrl,
+    '-map', '0:v:0', '-map', '0:a:0',
+    '-c:v', 'copy',
+    '-c:a', 'aac', '-b:a', '192k',
+    '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+    '-f', 'mp4', 'pipe:1'
+  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let stderr = '';
+  let outputBytes = 0;
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-8000); });
+  const limitedOutput = new Transform({
+    transform(chunk, encoding, callback) {
+      outputBytes += chunk.length;
+      if (outputBytes > 2 * 1024 * 1024 * 1024) {
+        callback(new Error('O vídeo convertido ultrapassa o limite de 2 GB por episódio.'));
+        child.kill('SIGKILL');
+      } else callback(null, chunk);
+    }
+  });
+  child.stdout.pipe(limitedOutput);
+  const closePromise = new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (code, signal) => {
+      if (code === 0) resolve();
+      else reject(new Error(('Falha ao recuperar episódio ' + number + ': ' +
+        (stderr.trim() || ('FFmpeg encerrou com código ' + code + (signal ? ' (' + signal + ')' : '')))).slice(0, 500)));
+    });
+  });
+  try {
+    const updatePromise = drive.files.update({
+      fileId,
+      requestBody: { mimeType: 'video/mp4' },
+      media: { mimeType: 'video/mp4', body: limitedOutput },
+      fields: 'id,name,mimeType,size,webViewLink'
+    });
+    const [updated] = await Promise.all([updatePromise, closePromise]);
+    return updated.data;
+  } catch (error) {
+    child.kill('SIGKILL');
+    limitedOutput.destroy();
+    throw error;
+  }
+}
+
+async function processDriveRecoveryJob(jobId) {
+  const claimed = await pool.query(
+    "UPDATE catalog_drive_recovery_jobs SET status = 'running', updated_at = NOW() WHERE id = $1 AND status = 'queued' RETURNING id",
+    [jobId]
+  );
+  if (!claimed.rowCount) return;
+  try {
+    const episodes = await pool.query(
+      "SELECT e.id, e.episode_number, e.video_url, e.drive_file_id FROM catalog_episodes e WHERE e.drive_recovery_job_id = $1 AND e.drive_recovery_status = 'queued' ORDER BY e.id",
+      [jobId]
+    );
+    const drive = await googleDriveClient();
+    for (const episode of episodes.rows) {
+      await pool.query("UPDATE catalog_episodes SET drive_recovery_status = 'recovering', drive_recovery_error = '' WHERE id = $1", [episode.id]);
+      try {
+        if (!episode.drive_file_id || !episode.video_url) throw new Error('Falta o ID do arquivo no Drive ou o link original do episódio.');
+        await replaceDriveFileFromSource(drive, episode.video_url, episode.drive_file_id, episode.episode_number);
+        await pool.query("UPDATE catalog_episodes SET drive_recovery_status = 'recovered', drive_recovery_error = '' WHERE id = $1", [episode.id]);
+        await pool.query("UPDATE catalog_drive_recovery_jobs SET completed_episodes = completed_episodes + 1, updated_at = NOW() WHERE id = $1", [jobId]);
+      } catch (error) {
+        const message = String(error.message || 'Falha ao recuperar o episódio').slice(0, 500);
+        console.warn('Falha na recuperação do episódio ' + episode.episode_number + ':', message);
+        await pool.query("UPDATE catalog_episodes SET drive_recovery_status = 'failed', drive_recovery_error = $2 WHERE id = $1", [episode.id, message]);
+        await pool.query("UPDATE catalog_drive_recovery_jobs SET failed_episodes = failed_episodes + 1, updated_at = NOW() WHERE id = $1", [jobId]);
+      }
+    }
+    const counts = await pool.query(
+      "SELECT COUNT(*) FILTER (WHERE drive_recovery_status = 'recovered')::int AS recovered, COUNT(*) FILTER (WHERE drive_recovery_status = 'failed')::int AS failed FROM catalog_episodes WHERE drive_recovery_job_id = $1",
+      [jobId]
+    );
+    const recovered = counts.rows[0].recovered;
+    const failed = counts.rows[0].failed;
+    await pool.query(
+      'UPDATE catalog_drive_recovery_jobs SET status = $2, completed_episodes = $3, failed_episodes = $4, updated_at = NOW() WHERE id = $1',
+      [jobId, failed ? 'completed_with_errors' : 'completed', recovered, failed]
+    );
+  } catch (error) {
+    console.error('Erro no lote de recuperação do Google Drive:', error.message);
+    await pool.query("UPDATE catalog_drive_recovery_jobs SET status = 'failed', updated_at = NOW() WHERE id = $1", [jobId]).catch(() => {});
+    await pool.query(
+      "UPDATE catalog_episodes SET drive_recovery_status = 'failed', drive_recovery_error = $2 WHERE drive_recovery_job_id = $1 AND drive_recovery_status IN ('queued', 'recovering')",
+      [jobId, String(error.message || 'Falha na recuperação').slice(0, 500)]
+    ).catch(() => {});
+  }
+}
+
+app.get('/admin/google-drive/recovery/preview', authRequired, adminRequired, async (_req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT e.id, s.title AS series_title, e.episode_number, e.drive_file_id,
+             e.video_url, e.drive_recovery_status, e.drive_recovery_error
+      FROM catalog_episodes e
+      JOIN catalog_series s ON s.id = e.series_id
+      WHERE e.drive_file_id IS NOT NULL AND e.drive_file_id <> ''
+      ORDER BY s.title, e.episode_number
+      LIMIT 500
+    `);
+    const items = result.rows.map(row => ({
+      id: String(row.id),
+      seriesTitle: row.series_title,
+      episodeNumber: row.episode_number,
+      hasSourceUrl: Boolean(row.video_url),
+      recoveryStatus: row.drive_recovery_status,
+      recoveryError: row.drive_recovery_error || ''
+    }));
+    return res.json({
+      items,
+      eligible: items.filter(item => item.hasSourceUrl && ['not_checked', 'failed'].includes(item.recoveryStatus)).length,
+      missingSource: items.filter(item => !item.hasSourceUrl).length,
+      recovered: items.filter(item => item.recoveryStatus === 'recovered').length,
+      failed: items.filter(item => item.recoveryStatus === 'failed').length
+    });
+  } catch (error) {
+    console.error('Erro ao preparar prévia da recuperação:', error.message);
+    return res.status(500).json({ error: 'Não foi possível preparar a lista de episódios recuperáveis.' });
+  }
+});
+
+app.post('/admin/google-drive/recovery', authRequired, adminRequired, async (req, res) => {
+  const episodeIds = Array.isArray(req.body.episodeIds) ? req.body.episodeIds : [];
+  if (!episodeIds.length || episodeIds.length > 100 ||
+      episodeIds.some(id => !/^\\d+$/.test(String(id)))) {
+    return res.status(400).json({ error: 'Selecione de 1 a 100 episódios válidos.' });
+  }
+  try {
+    const connected = await pool.query('SELECT id FROM google_drive_credentials WHERE id = 1');
+    if (!connected.rowCount) return res.status(409).json({ error: 'Conecte o Google Drive antes de recuperar episódios.' });
+    const ids = Array.from(new Set(episodeIds.map(String)));
+    const eligible = await pool.query(
+      "SELECT id FROM catalog_episodes WHERE id = ANY($1::bigint[]) AND drive_file_id IS NOT NULL AND drive_file_id <> '' AND video_url <> '' AND drive_recovery_status IN ('not_checked', 'failed')",
+      [ids]
+    );
+    if (eligible.rowCount !== ids.length) {
+      return res.status(409).json({ error: 'Um ou mais episódios não têm link original/arquivo no Drive, já foram recuperados ou estão em processamento. Atualize a prévia.' });
+    }
+    const jobId = crypto.randomUUID();
+    await pool.query(
+      "INSERT INTO catalog_drive_recovery_jobs (id, status, total_episodes) VALUES ($1, 'queued', $2)",
+      [jobId, ids.length]
+    );
+    await pool.query(
+      "UPDATE catalog_episodes SET drive_recovery_status = 'queued', drive_recovery_error = '', drive_recovery_job_id = $2 WHERE id = ANY($1::bigint[])",
+      [ids, jobId]
+    );
+    res.status(202).json({ jobId, status: 'queued', total: ids.length });
+    setImmediate(() => processDriveRecoveryJob(jobId));
+  } catch (error) {
+    console.error('Erro ao iniciar recuperação do Drive:', error.message);
+    return res.status(500).json({ error: 'Não foi possível iniciar a recuperação dos episódios.' });
+  }
+});
+
+app.get('/admin/google-drive/recovery/:jobId', authRequired, adminRequired, async (req, res) => {
+  const jobId = String(req.params.jobId || '');
+  if (!/^[0-9a-f-]{36}$/i.test(jobId)) return res.status(400).json({ error: 'Lote de recuperação inválido.' });
+  try {
+    const result = await pool.query(
+      'SELECT id, status, total_episodes, completed_episodes, failed_episodes FROM catalog_drive_recovery_jobs WHERE id = $1',
+      [jobId]
+    );
+    if (!result.rowCount) return res.status(404).json({ error: 'Lote de recuperação não encontrado.' });
+    const row = result.rows[0];
+    return res.json({
+      jobId: row.id, status: row.status, total: row.total_episodes,
+      recovered: row.completed_episodes, failed: row.failed_episodes,
+      pending: Math.max(0, row.total_episodes - row.completed_episodes - row.failed_episodes)
+    });
+  } catch (error) {
+    console.error('Erro ao consultar lote de recuperação:', error.message);
+    return res.status(500).json({ error: 'Não foi possível consultar o progresso da recuperação.' });
+  }
+});
 
 app.get('/admin/google-drive/connect', authRequired, adminRequired, googleDriveLimiter, async (req, res) => {
   try {
