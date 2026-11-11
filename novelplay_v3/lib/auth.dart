@@ -140,6 +140,23 @@ class NovelAuth {
     return value;
   }
 
+  static Future<Map<String, dynamic>> googleDriveRecoveryPreview() async {
+    final saved = await token();
+    if (saved == null) throw Exception('Faça login novamente.');
+    return _request('/admin/google-drive/recovery/preview', bearer: saved);
+  }
+
+  static Future<Map<String, dynamic>> startGoogleDriveRecovery(List<String> episodeIds) async {
+    final saved = await token();
+    if (saved == null) throw Exception('Faça login novamente.');
+    return _request('/admin/google-drive/recovery', bearer: saved, body: {'episodeIds': episodeIds});
+  }
+
+  static Future<Map<String, dynamic>> googleDriveRecoveryJob(String jobId) async {
+    final saved = await token();
+    if (saved == null) throw Exception('Faça login novamente.');
+    return _request('/admin/google-drive/recovery/$jobId', bearer: saved);
+  }
   static Future<void> deleteSeries(String seriesId) async {
     final saved = await token();
     if (saved == null) throw Exception('Sua sessão terminou. Entre novamente.');
@@ -457,9 +474,129 @@ class _GoogleDriveAdminScreenState extends State<GoogleDriveAdminScreen> {
         label: const Text('Verificar conexão'),
       ),
       const SizedBox(height: 18),
+      const DriveRecoveryAdminSection(),
+      const SizedBox(height: 18),
       const Text('Ao tocar em Reconectar, o Google abrirá uma página para você autorizar o NovelPlay a consultar pastas e enviar vídeos ao Drive. Depois, volte ao app e toque em Verificar conexão.',
         textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, height: 1.4)),
     ],
+  );
+}
+
+
+class DriveRecoveryAdminSection extends StatefulWidget {
+  const DriveRecoveryAdminSection({super.key});
+  @override
+  State<DriveRecoveryAdminSection> createState() => _DriveRecoveryAdminSectionState();
+}
+
+class _DriveRecoveryAdminSectionState extends State<DriveRecoveryAdminSection> {
+  bool loading = false, running = false;
+  String? error, progress;
+  List<Map<String, dynamic>> items = [];
+  final Set<String> selected = {};
+
+  Future<void> _preview() async {
+    setState(() { loading = true; error = null; });
+    try {
+      final data = await NovelAuth.googleDriveRecoveryPreview();
+      if (!mounted) return;
+      final rows = (data['items'] as List? ?? const []).whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e)).toList();
+      setState(() {
+        items = rows;
+        final eligible = rows.where((e) => e['hasSourceUrl'] == true &&
+          ['not_checked', 'failed'].contains(e['recoveryStatus']))
+          .map((e) => '${e['id']}').toSet();
+        selected.removeWhere((id) => !eligible.contains(id));
+        loading = false;
+      });
+    } catch (e) {
+      if (mounted) setState(() { error = e.toString(); loading = false; });
+    }
+  }
+
+  Future<void> _recover() async {
+    if (selected.isEmpty || running) return;
+    final ids = selected.toList();
+    final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('Testar recuperação'),
+      content: Text('O NovelPlay vai substituir o conteúdo de ${ids.length} arquivo(s) existente(s) no Drive, preservando os links. Para o primeiro teste, selecione apenas um episódio.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Confirmar')),
+      ],
+    ));
+    if (ok != true) return;
+    setState(() { running = true; error = null; progress = 'Iniciando...'; });
+    try {
+      final started = await NovelAuth.startGoogleDriveRecovery(ids);
+      final jobId = '${started['jobId']}';
+      while (mounted) {
+        final state = await NovelAuth.googleDriveRecoveryJob(jobId);
+        setState(() => progress = 'Recuperados: ${state['recovered']}/${state['total']} • Falhas: ${state['failed']} • Pendentes: ${state['pending']}');
+        if (['completed', 'completed_with_errors', 'failed'].contains(state['status'])) break;
+        await Future<void>.delayed(const Duration(seconds: 5));
+      }
+      if (mounted) await _preview();
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    } finally {
+      if (mounted) setState(() => running = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Card(
+    color: const Color(0xff1b1b27),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Text('Recuperar episódios antigos', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
+        const Text('Procura episódios enviados pelo NovelPlay que ainda têm o link original salvo. A recuperação atualiza o arquivo existente no Drive, sem criar outra cópia.',
+          style: TextStyle(color: Colors.white70, height: 1.35)),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: loading || running ? null : _preview,
+          icon: loading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.search),
+          label: Text(loading ? 'Procurando...' : 'Ver episódios recuperáveis'),
+        ),
+        if (items.isNotEmpty) ...[
+          Text('Encontrados: ${items.length} • Com link original: ${items.where((e) => e['hasSourceUrl'] == true).length}',
+            style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          for (final item in items)
+            if (item['hasSourceUrl'] == true &&
+                ['not_checked', 'failed'].contains(item['recoveryStatus']))
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: selected.contains('${item['id']}'),
+                onChanged: running ? null : (value) => setState(() {
+                  if (value == true) { selected.add('${item['id']}'); }
+                  else { selected.remove('${item['id']}'); }
+                }),
+                title: Text('${item['seriesTitle']}'),
+                subtitle: Text('Episódio ${item['episodeNumber']}'),
+                activeColor: const Color(0xffff6b9d),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+          FilledButton.icon(
+            onPressed: selected.isEmpty || running ? null : _recover,
+            icon: running ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.build_circle_outlined),
+            label: Text(running ? 'Recuperando...' : 'Recuperar selecionados (${selected.length})'),
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xffff6b9d)),
+          ),
+        ] else if (!loading && error == null)
+          const Text('A lista ainda não foi consultada.', style: TextStyle(color: Colors.white60)),
+        if (progress != null) Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Text(progress!, style: const TextStyle(color: Colors.lightGreenAccent)),
+        ),
+        if (error != null) Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Text(error!, style: const TextStyle(color: Colors.redAccent)),
+        ),
+      ]),
+    ),
   );
 }
 
