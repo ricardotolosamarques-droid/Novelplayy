@@ -35,3 +35,20 @@ O processamento de upload/recuperação não pode depender de tarefas em segundo
 4. Preparar imagem Docker e configuração Cloud Run.
 5. Fazer backup e cópia de dados quando a origem estiver acessível.
 6. Testar em paralelo; só então propor a troca da URL do aplicativo.
+
+## Decisão para tarefas demoradas
+A inspeção do código confirmou que uploads e recuperações processam vários episódios em sequência, e um episódio pode demorar mais que o limite máximo de 30 minutos do Cloud Tasks HTTP. Por isso, não vamos disparar o lote inteiro por uma única chamada Cloud Tasks.
+
+A direção técnica passa a ser um **Cloud Run Job worker**, acionado pela API depois de gravar o job no PostgreSQL:
+- A API continua atendendo login, catálogo e painel.
+- O worker executa fora do ciclo de vida da requisição HTTP, com timeout de tarefa configurável (até 7 dias na plataforma).
+- O worker recebe apenas o ID do job, busca os episódios pendentes no Neon e atualiza o progresso no banco.
+- Cada episódio concluído permanece marcado no banco; novas tentativas devem ignorar os já enviados/recuperados.
+- A execução deve reivindicar o job atomicamente no PostgreSQL para impedir dois workers processando o mesmo lote.
+- A API só responde sucesso ao enfileiramento depois de confirmar que a execução do Job foi solicitada; falhas de disparo deixam o job recuperável no banco.
+- A verificação de vídeos hoje guarda progresso em memória (Map); antes de migrar, ela também precisa passar a persistir estado no PostgreSQL ou ficar explicitamente fora da primeira implantação.
+
+**Limite conhecido:** o timeout de Cloud Run Jobs pode chegar a 7 dias, mas isso não garante execução sem interrupções. O worker precisa de checkpoints no banco e retries idempotentes. Referência: documentação oficial de [Cloud Run Jobs](https://docs.cloud.google.com/run/docs/create-jobs) e [retries/checkpoints](https://docs.cloud.google.com/run/docs/jobs-retries).
+
+## Correção da imagem Docker
+O repositório não contém package-lock.json. O comando npm ci falharia na build por esse motivo. O Dockerfile da branch foi ajustado para npm install --omit=dev --no-audit --no-fund. Quando um lockfile for criado e versionado, podemos voltar para npm ci para builds reprodutíveis.
