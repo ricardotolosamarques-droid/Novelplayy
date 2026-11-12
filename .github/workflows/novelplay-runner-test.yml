@@ -1,0 +1,32 @@
+name: NovelPlay - teste do runner gratuito
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ffmpeg-runner-check:
+    name: Verificar Node.js e FFmpeg
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Baixar o repositório
+        uses: actions/checkout@v4
+
+      - name: Verificar Node.js
+        run: |
+          node --version
+          npm --version
+
+      - name: Instalar FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - name: Confirmar FFmpeg
+        run: |
+          ffmpeg -version
+          ffprobe -version
+          echo "Runner pronto para a próxima etapa de testes."
