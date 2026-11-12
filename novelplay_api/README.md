@@ -37,3 +37,27 @@ As senhas são armazenadas com bcrypt. Os tokens JWT expiram em 7 dias. O papel 
 ## Estado
 
 Esta é a primeira etapa da autenticação. O aplicativo Flutter ainda precisa ser conectado à URL pública deste serviço e receber as telas de login/cadastro e a área administrativa. Configure primeiro o Render e teste `/health`.
+
+
+## Google Drive OAuth e upload de episódios
+
+O backend usa um cliente OAuth do tipo **Aplicativo da Web**. No Google Cloud Console, deixe **Origens JavaScript autorizadas** vazio e cadastre esta URI exata em **URIs de redirecionamento autorizados**:
+
+`https://novelplay-api-ee5f.onrender.com/google-drive/callback`
+
+Configure no serviço Render, em Environment:
+
+| Variável | Valor |
+| --- | --- |
+| `GOOGLE_CLIENT_ID` | ID do cliente OAuth do tipo Aplicativo da Web |
+| `GOOGLE_CLIENT_SECRET` | Segredo do mesmo cliente OAuth |
+| `GOOGLE_REDIRECT_URI` | `https://novelplay-api-ee5f.onrender.com/google-drive/callback` |
+| `GOOGLE_DRIVE_FOLDER_ID` | Opcional; pasta principal já usada pela aba Meu Drive |
+
+Se `GOOGLE_DRIVE_FOLDER_ID` não for definida, o backend usa a pasta configurada no aplicativo (`1O28a3-3bmKkVj_3dS9HlWX0Owyn3eFts`). Cada importação cria/localiza a subpasta da novelinha dentro dela e envia os episódios nessa pasta.
+
+A conexão é iniciada pelo painel administrativo do app em `GET /admin/google-drive/connect`; o retorno é tratado por `GET /google-drive/callback`. O refresh token é armazenado cifrado no PostgreSQL. Mantenha `JWT_SECRET` estável: ele também protege a chave usada para cifrar esse token.
+
+**Permissões:** a implementação atual solicita `https://www.googleapis.com/auth/drive`, com leitura e escrita, porque precisa criar pastas, enviar vídeos, listar arquivos e substituir arquivos antigos durante a recuperação. Portanto, a integração OAuth atual **não é somente leitura**. Um escopo somente leitura impediria os uploads. A redução para `drive.file` exigiria ajustar a seleção/acesso à pasta existente e validar a recuperação de arquivos; não troque o escopo sem revisar esses fluxos.
+
+Nunca envie o Client Secret ou tokens em mensagens, commits ou APKs. Eles pertencem somente às variáveis protegidas do Render.
