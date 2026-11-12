@@ -455,8 +455,10 @@ async function processDriveUploadJob(jobId) {
     const seriesResult = await pool.query('SELECT title FROM catalog_series WHERE id = $1', [job.series_id]);
     if (!seriesResult.rowCount) throw new Error('A novelinha não foi encontrada.');
     const drive = await googleDriveClient();
-    const rootFolder = await findOrCreateDriveFolder(drive, 'NovelPlay', null);
-    const seriesFolder = await findOrCreateDriveFolder(drive, seriesResult.rows[0].title, rootFolder);
+    // Use the same parent folder that the Flutter "Meu Drive" tab lists.
+    // It can be overridden in Render without changing the APK.
+    const rootFolderId = (process.env.GOOGLE_DRIVE_FOLDER_ID || '1O28a3-3bmKkVj_3dS9HlWX0Owyn3eFts').trim();
+    const seriesFolder = await findOrCreateDriveFolder(drive, seriesResult.rows[0].title, rootFolderId);
     const episodes = await pool.query(
       "SELECT id, episode_number, video_url FROM catalog_episodes WHERE drive_upload_job_id = $1 AND drive_upload_status = 'queued' ORDER BY episode_number",
       [jobId]
