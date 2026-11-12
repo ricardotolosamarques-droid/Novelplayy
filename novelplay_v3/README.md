@@ -110,7 +110,9 @@ O workflow injeta a chave no build usando `--dart-define`; a chave não é grava
 
 ## Estado da autenticação Google Drive — 05/11/2026
 
-A tela **Meu Drive** ainda usa a chave `DRIVE_API_KEY` e consulta uma pasta compartilhada publicamente. Isso **não é ainda a integração OAuth Google com escopo somente leitura** definida para a versão final. A migração para login Google e token OAuth `drive.readonly` permanece pendente; não considere a integração autenticada concluída.
+A aba **Meu Drive** ainda lista e reproduz os vídeos da pasta pública usando a chave `DRIVE_API_KEY`. Separadamente, o painel administrativo já possui conexão OAuth Google no backend para enviar vídeos, recuperar arquivos antigos e verificar áudio/vídeo no Drive. O cliente OAuth é do tipo **Aplicativo da Web** e usa a URI de retorno `https://novelplay-api-ee5f.onrender.com/google-drive/callback`.
+
+A conexão OAuth de upload solicita atualmente o escopo `https://www.googleapis.com/auth/drive` (leitura e escrita), pois o servidor cria pastas, envia vídeos e atualiza arquivos existentes. Isso **não é um escopo somente leitura**. Um token `drive.readonly` não pode executar os uploads solicitados; para voltar a somente leitura seria necessário remover as funções de escrita ou redesenhar o fluxo com outro consentimento/permissão.
 
 O workflow **Preparar Android e obter SHA-1 do Novelinha** foi corrigido para criar um keystore de depuração antes de executar `signingReport` e falhar caso o SHA-1 não apareça. O workflow principal de APK também gera e exibe o SHA-1 da assinatura usada no APK ARM64.
 
