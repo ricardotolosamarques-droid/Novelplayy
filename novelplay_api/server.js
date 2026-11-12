@@ -636,7 +636,17 @@ async function verifyDriveEpisode(drive, episode) {
   );
   const child = spawn('ffmpeg', [
     '-hide_banner', '-nostdin', '-v', 'error', '-xerror',
+    // Limita a memória usada pelos decodificadores em servidores pequenos.
+    // Sem isso, o FFmpeg pode criar várias threads por núcleo e esgotar os
+    // 512 MB do serviço ao validar vídeos em alta resolução.
+    '-threads', '1',
+    '-filter_threads', '1',
+    '-filter_complex_threads', '1',
+    '-probesize', '2M',
+    '-analyzeduration', '2M',
+    '-max_alloc', '67108864',
     '-i', 'pipe:0',
+    '-threads', '1',
     '-map', '0:v:0', '-map', '0:a:0',
     '-f', 'null', '-'
   ], { stdio: ['pipe', 'ignore', 'pipe'] });
