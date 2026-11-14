@@ -7,7 +7,7 @@ import 'package:video_player/video_player.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
-const _publishedCatalogApi = 'https://novelplay-api-ee5f.onrender.com/catalog';
+const _publishedCatalogApi = 'https://novelplayy-a2dd0.containers.snapdeploy.app/catalog';
 
 class PublishedCatalogScreen extends StatefulWidget {
   final String? initialSeriesId;
@@ -63,7 +63,7 @@ class _PublishedCatalogScreenState extends State<PublishedCatalogScreen> {
     if (confirmed != true || !mounted) return;
     try {
       final response = await http.delete(
-        Uri.parse('https://novelplay-api-ee5f.onrender.com/admin/catalog/series/$id'),
+        Uri.parse('https://novelplayy-a2dd0.containers.snapdeploy.app/admin/catalog/series/$id'),
         headers: {'Authorization': 'Bearer $_adminToken'},
       ).timeout(const Duration(seconds: 25));
       if (response.statusCode < 200 || response.statusCode >= 300) {
