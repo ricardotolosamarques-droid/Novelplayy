@@ -376,7 +376,7 @@ async function getReelShortBookshelf(type) {
   // A API original também recebe os nomes em indonésio.
   const normalizeShelfName = value => String(value || '')
     .normalize('NFD')
-    .replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '');
   const shelfAliases = {
@@ -399,7 +399,8 @@ async function getReelShortBookshelf(type) {
     if (!bookTitle || !filteredTitle) continue;
     let bookId = String(raw._id || raw.book_id || '');
     if (!bookId) bookId = await resolveReelShortBookId(filteredTitle, bookTitle);
-    if (!bookId) continue;
+    // Preserve os dados da estante mesmo se a busca não resolver o ID agora.
+    // O app pode exibir capa/título e resolver o ID ao abrir a novelinha.
     books.push({
       book_id: bookId,
       book_title: bookTitle,
