@@ -1158,6 +1158,55 @@ async function reelShortJson(path, retry = true) {
   }
 }
 
+const reelShortShelfCache = new Map();
+
+function findReelShortShelfList(value, depth = 0) {
+  if (!value || typeof value !== 'object' || depth > 8) return null;
+  if (Array.isArray(value.bookShelfList)) return value.bookShelfList;
+  for (const child of Object.values(value)) {
+    const found = findReelShortShelfList(child, depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+async function getReelShortBookshelf(type) {
+  const cached = reelShortShelfCache.get(type);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+
+  const payload = await reelShortJson('.json');
+  const shelves = findReelShortShelfList(payload && payload.pageProps);
+  if (!shelves) throw new Error('O ReelShort não retornou as categorias do catálogo.');
+
+  const terms = {
+    recommended: ['recomendado', 'recommended'],
+    newrelease: ['lançamento', 'lancamento', 'new release'],
+    dramadub: ['dublado', 'dublada', 'drama com dub', 'dubbed']
+  }[type] || [];
+  const shelf = shelves.find(item => {
+    const name = String(item && item.bookshelf_name || '').toLowerCase();
+    return terms.some(term => name.includes(term));
+  });
+
+  const books = (shelf && Array.isArray(shelf.books) ? shelf.books : [])
+    .map(book => ({
+      book_id: String(book._id || book.book_id || ''),
+      book_title: String(book.book_title || ''),
+      filtered_title: normalizeReelShortSlug(book.filtered_title || book.book_title),
+      book_pic: String(book.book_pic || ''),
+      special_desc: String(book.special_desc || ''),
+      chapter_count: Number(book.chapter_count || 0)
+    }))
+    .filter(book => book.book_id && book.book_title && book.filtered_title);
+
+  const value = {
+    bookshelf_name: String(shelf && shelf.bookshelf_name || type),
+    books
+  };
+  reelShortShelfCache.set(type, { value, expiresAt: Date.now() + 3 * 60 * 1000 });
+  return value;
+}
+
 async function getReelShortVideoUrl(episodeNumber, filteredTitle, bookId, chapterId) {
   const slug = 'episode-' + episodeNumber + '-' + filteredTitle + '-' + bookId + '-' + chapterId;
   const query = new URLSearchParams({ play_time: '1', slug }).toString();
@@ -1186,6 +1235,17 @@ app.get('/reelshort/search', reelShortLimiter, async (req, res) => {
   } catch (error) {
     console.error('Erro na pesquisa ReelShort:', error.message);
     return res.status(502).json({ error: error.message || 'Não foi possível pesquisar no ReelShort.' });
+  }
+});
+
+app.get('/reelshort/:shelf', reelShortLimiter, async (req, res, next) => {
+  const shelf = String(req.params.shelf || '');
+  if (!['recommended', 'newrelease', 'dramadub'].includes(shelf)) return next();
+  try {
+    return res.json(await getReelShortBookshelf(shelf));
+  } catch (error) {
+    console.error('Erro ao consultar categoria ReelShort:', error.message);
+    return res.status(502).json({ error: error.message || 'Não foi possível carregar esta categoria do ReelShort.' });
   }
 });
 
@@ -1294,6 +1354,43 @@ app.get('/reelshort/episodes/:bookId', reelShortLimiter, async (req, res) => {
   } catch (error) {
     console.error('Erro ao consultar episódios ReelShort:', error.message);
     return res.status(502).json({ error: error.message || 'Não foi possível obter os episódios.' });
+  }
+});
+
+app.get('/reelshort/video/:bookId/:episodeNumber', reelShortLimiter, async (req, res) => {
+  const bookId = String(req.params.bookId || '');
+  const episodeNumber = Number(req.params.episodeNumber);
+  const filteredTitle = normalizeReelShortSlug(req.query.filtered_title);
+  const chapterId = String(req.query.chapter_id || '');
+  if (!/^[A-Za-z0-9_-]{4,100}$/.test(bookId) ||
+      !filteredTitle || !/^[A-Za-z0-9_-]{1,180}$/.test(chapterId) ||
+      !Number.isSafeInteger(episodeNumber) || episodeNumber < 1) {
+    return res.status(400).json({ error: 'Identificador ou episódio inválido.' });
+  }
+  try {
+    const found = await getReelShortBookDetails(filteredTitle + '-' + bookId);
+    const details = found.details;
+    const paidStart = Number(details.paid_start);
+    const isPaid = Number(details.is_paid);
+    const requested = found.episodes.find(item =>
+      Number(item.serial_number || item.episode || item.episode_number || 0) === episodeNumber &&
+      String(item.chapter_id || item.chapterId || item._id || '') === chapterId
+    );
+    const free = requested && (
+      (isPaid === 0 && Number.isSafeInteger(paidStart) && paidStart === 0) ||
+      (Number.isSafeInteger(paidStart) && paidStart > 0 && episodeNumber < paidStart)
+    );
+    if (!free) {
+      return res.status(403).json({ error: 'Este episódio não está marcado como gratuito no ReelShort.' });
+    }
+    const videoUrl = await getReelShortVideoUrl(episodeNumber, filteredTitle, bookId, chapterId);
+    if (!isHttpsUrl(videoUrl)) {
+      return res.status(404).json({ error: 'Vídeo público indisponível para este episódio.' });
+    }
+    return res.json({ video_url: videoUrl, episode: episodeNumber });
+  } catch (error) {
+    console.error('Erro ao consultar vídeo público ReelShort:', error.message);
+    return res.status(502).json({ error: error.message || 'Não foi possível obter o vídeo.' });
   }
 });
 
