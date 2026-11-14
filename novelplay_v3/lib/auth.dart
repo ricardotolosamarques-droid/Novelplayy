@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'drive_screen.dart';
 import 'link_import_screen.dart';
 
-const String _authBaseUrl = 'https://novelplay-api-ee5f.onrender.com';
+const String _authBaseUrl = 'https://novelplayy-a2dd0.containers.snapdeploy.app';
 
 class NovelUser {
   final String id, username, email, role;
