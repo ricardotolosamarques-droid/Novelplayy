@@ -272,7 +272,7 @@ let reelShortBuildIdFetchedAt = 0;
 const reelShortHeaders = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
   'Accept': 'application/json, text/plain, */*',
-  'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.9,id;q=0.8',
   'Referer': 'https://www.reelshort.com/',
   'Origin': 'https://www.reelshort.com'
 };
@@ -281,7 +281,7 @@ async function getReelShortBuildId(force = false) {
   if (!force && reelShortBuildId && Date.now() - reelShortBuildIdFetchedAt < 30 * 60 * 1000) {
     return reelShortBuildId;
   }
-  const response = await fetch('https://www.reelshort.com/pt', {
+  const response = await fetch('https://www.reelshort.com/id', {
     headers: reelShortHeaders,
     signal: AbortSignal.timeout(12000)
   });
@@ -307,7 +307,7 @@ function normalizeReelShortSlug(value) {
 
 async function reelShortJson(path, retry = true) {
   const buildId = await getReelShortBuildId();
-  const url = 'https://www.reelshort.com/_next/data/' + encodeURIComponent(buildId) + '/pt' + path;
+  const url = 'https://www.reelshort.com/_next/data/' + encodeURIComponent(buildId) + '/id' + path;
   const response = await fetch(url, {
     headers: reelShortHeaders,
     signal: AbortSignal.timeout(15000)
@@ -389,7 +389,12 @@ async function getReelShortBookshelf(type) {
     return shelfAliases.some(alias => name.includes(normalizeShelfName(alias)));
   });
 
-  const rawBooks = shelf && Array.isArray(shelf.books) ? shelf.books : [];
+  if (!shelf) {
+    const available = shelves.map(item => String(item && item.bookshelf_name || '')).filter(Boolean);
+    throw new Error('Categoria ReelShort não encontrada: ' + type + '. Categorias recebidas: ' + available.join(' | '));
+  }
+
+  const rawBooks = Array.isArray(shelf.books) ? shelf.books : [];
   const books = [];
   // Reproduz o comportamento do projeto wanglinsaputra/Rest-Api-ReelShort:
   // estantes frequentemente omitem book_id; a busca individual completa-o.
