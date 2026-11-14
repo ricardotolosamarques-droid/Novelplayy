@@ -52,12 +52,12 @@ class Novel {
     );
   }
 
-  factory Novel.fromReelShortBook(Map<String, dynamic> book) {
+  factory Novel.fromReelShortBook(Map<String, dynamic> book, {String genre = 'ReelShort'}) {
     return Novel(
       (book['book_id'] ?? '').toString(),
       (book['book_title'] ?? 'Sem título').toString(),
       (book['special_desc'] ?? '').toString(),
-      'ReelShort',
+      genre,
       (book['book_pic'] ?? '').toString(),
       const [],
       slug: (book['filtered_title'] ?? '').toString(),
@@ -76,7 +76,7 @@ class Catalog {
 class Sources {
   static String reelshortApiUrl =
       const String.fromEnvironment('REELSHORT_API_URL',
-          defaultValue: 'https://novelplay-api.onrender.com/api/v1/reelshort');
+          defaultValue: 'https://novelplay-api-ee5f.onrender.com/reelshort');
   static const String catalogUrl =
       String.fromEnvironment('CATALOG_URL');
   static const String apiBaseUrl =
@@ -181,8 +181,10 @@ class Sources {
         }
         final titles = entries
             .whereType<Map>()
-            .map((item) =>
-                Novel.fromReelShortBook(Map<String, dynamic>.from(item)))
+            .map((item) => Novel.fromReelShortBook(
+                  Map<String, dynamic>.from(item),
+                  genre: allowedShelf == 'dramadub' ? 'Dublado • ReelShort' : 'ReelShort',
+                ))
             .where((n) => n.slug.isNotEmpty)
             .toList();
         return Catalog(titles,
