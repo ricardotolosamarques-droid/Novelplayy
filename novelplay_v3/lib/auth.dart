@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'drive_screen.dart';
 import 'link_import_screen.dart';
 
@@ -123,52 +122,6 @@ class NovelAuth {
     });
   }
 
-  static Future<Map<String, dynamic>> googleDriveStatus() async {
-    final saved = await token();
-    if (saved == null) throw Exception('Faça login novamente.');
-    return _request('/admin/google-drive/status', bearer: saved);
-  }
-
-  static Future<String> googleDriveConnectUrl() async {
-    final saved = await token();
-    if (saved == null) throw Exception('Faça login novamente.');
-    final data = await _request('/admin/google-drive/connect', bearer: saved);
-    final value = data['authorizationUrl'];
-    if (value is! String || value.isEmpty) {
-      throw Exception('O servidor não retornou o endereço de autorização.');
-    }
-    return value;
-  }
-
-  static Future<Map<String, dynamic>> googleDriveRecoveryPreview() async {
-    final saved = await token();
-    if (saved == null) throw Exception('Faça login novamente.');
-    return _request('/admin/google-drive/recovery/preview', bearer: saved);
-  }
-
-  static Future<Map<String, dynamic>> startGoogleDriveRecovery(List<String> episodeIds) async {
-    final saved = await token();
-    if (saved == null) throw Exception('Faça login novamente.');
-    return _request('/admin/google-drive/recovery', bearer: saved, body: {'episodeIds': episodeIds});
-  }
-
-  static Future<Map<String, dynamic>> googleDriveRecoveryJob(String jobId) async {
-    final saved = await token();
-    if (saved == null) throw Exception('Faça login novamente.');
-    return _request('/admin/google-drive/recovery/$jobId', bearer: saved);
-  }
-
-  static Future<Map<String, dynamic>> startGoogleDriveVerification() async {
-    final saved = await token();
-    if (saved == null) throw Exception('Faça login novamente.');
-    return _request('/admin/google-drive/verify', bearer: saved, body: {});
-  }
-
-  static Future<Map<String, dynamic>> googleDriveVerificationJob(String jobId) async {
-    final saved = await token();
-    if (saved == null) throw Exception('Faça login novamente.');
-    return _request('/admin/google-drive/verify/$jobId', bearer: saved);
-  }
   static Future<void> deleteSeries(String seriesId) async {
     final saved = await token();
     if (saved == null) throw Exception('Sua sessão terminou. Entre novamente.');
@@ -394,354 +347,6 @@ class _AuthScreenState extends State<AuthScreen> {
   );
 }
 
-class GoogleDriveAdminScreen extends StatefulWidget {
-  const GoogleDriveAdminScreen({super.key});
-  @override
-  State<GoogleDriveAdminScreen> createState() => _GoogleDriveAdminScreenState();
-}
-
-class _GoogleDriveAdminScreenState extends State<GoogleDriveAdminScreen> {
-  bool loading = true, connecting = false, connected = false;
-  String? error;
-
-  @override
-  void initState() {
-    super.initState();
-    _checkStatus();
-  }
-
-  Future<void> _checkStatus() async {
-    setState(() { loading = true; error = null; });
-    try {
-      final result = await NovelAuth.googleDriveStatus();
-      if (!mounted) return;
-      setState(() { connected = result['connected'] == true; loading = false; });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() { error = e.toString().replaceFirst('Exception: ', ''); loading = false; });
-    }
-  }
-
-  Future<void> _connect() async {
-    setState(() { connecting = true; error = null; });
-    try {
-      final url = await NovelAuth.googleDriveConnectUrl();
-      final opened = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-      if (!opened) throw Exception('Não foi possível abrir a página do Google. Tente novamente.');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Conclua a autorização no Google e volte ao NovelPlay. Depois toque em Verificar conexão.')),
-        );
-      }
-    } catch (e) {
-      if (mounted) setState(() => error = e.toString().replaceFirst('Exception: ', ''));
-    } finally {
-      if (mounted) setState(() => connecting = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(20),
-    children: [
-      const Icon(Icons.cloud_outlined, size: 64, color: Color(0xffff6b9d)),
-      const SizedBox(height: 14),
-      const Text('Google Drive', textAlign: TextAlign.center,
-        style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold)),
-      const SizedBox(height: 8),
-      const Text('Conecte a conta Google que contém as pastas, capas e vídeos das novelinhas.',
-        textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
-      const SizedBox(height: 24),
-      Card(
-        color: const Color(0xff1b1b27),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Row(children: [
-            Icon(connected ? Icons.check_circle : Icons.info_outline,
-              color: connected ? Colors.greenAccent : Colors.orangeAccent),
-            const SizedBox(width: 12),
-            Expanded(child: Text(
-              loading ? 'Verificando conexão...' : connected ? 'Google Drive conectado' : 'Google Drive não conectado',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            )),
-            if (loading) const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-          ]),
-        ),
-      ),
-      if (error != null) Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Text(error!, style: const TextStyle(color: Colors.redAccent), textAlign: TextAlign.center),
-      ),
-      const SizedBox(height: 14),
-      FilledButton.icon(
-        onPressed: connecting ? null : _connect,
-        icon: connecting ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.login),
-        label: Text(connecting ? 'Abrindo Google...' : connected ? 'Reconectar Google Drive' : 'Conectar Google Drive'),
-        style: FilledButton.styleFrom(backgroundColor: const Color(0xffff6b9d), padding: const EdgeInsets.symmetric(vertical: 15)),
-      ),
-      const SizedBox(height: 10),
-      OutlinedButton.icon(
-        onPressed: loading ? null : _checkStatus,
-        icon: const Icon(Icons.refresh),
-        label: const Text('Verificar conexão'),
-      ),
-      const SizedBox(height: 18),
-      const DriveRecoveryAdminSection(),
-      const SizedBox(height: 18),
-      const Text('Ao tocar em Reconectar, o Google abrirá uma página para você autorizar o NovelPlay a consultar pastas e enviar vídeos ao Drive. Depois, volte ao app e toque em Verificar conexão.',
-        textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, height: 1.4)),
-    ],
-  );
-}
-
-
-class DriveRecoveryAdminSection extends StatefulWidget {
-  const DriveRecoveryAdminSection({super.key});
-  @override
-  State<DriveRecoveryAdminSection> createState() => _DriveRecoveryAdminSectionState();
-}
-
-class _DriveRecoveryAdminSectionState extends State<DriveRecoveryAdminSection> {
-  bool loading = false, running = false, consulted = false, verifying = false;
-  String? error, progress, verificationProgress;
-  List<Map<String, dynamic>> items = [];
-  List<Map<String, dynamic>> results = [];
-  List<Map<String, dynamic>> verificationResults = [];
-  Map<String, dynamic> diagnostics = {};
-  final Set<String> selected = {};
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _preview();
-    });
-  }
-
-  Future<void> _preview() async {
-    setState(() { loading = true; error = null; });
-    try {
-      final data = await NovelAuth.googleDriveRecoveryPreview();
-      if (!mounted) return;
-      final rows = (data['items'] as List? ?? const []).whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e)).toList();
-      setState(() {
-        // Mostra somente episódios ainda recuperáveis. Os já recuperados
-        // desaparecem da lista após a atualização da prévia.
-        items = rows.where((e) => e['hasSourceUrl'] == true &&
-          ['not_checked', 'failed'].contains(e['recoveryStatus'])).toList();
-        diagnostics = Map<String, dynamic>.from(data);
-        // Toda nova consulta começa sem seleções para evitar lotes acidentais.
-        selected.clear();
-        results = [];
-        loading = false;
-        consulted = true;
-      });
-    } catch (e) {
-      if (mounted) setState(() { error = e.toString(); loading = false; consulted = true; });
-    }
-  }
-
-
-  Future<void> _verifyAllDriveVideos() async {
-    if (verifying || running) return;
-    setState(() {
-      verifying = true;
-      error = null;
-      verificationProgress = 'Preparando verificação completa...';
-      verificationResults = [];
-    });
-    try {
-      final started = await NovelAuth.startGoogleDriveVerification();
-      final jobId = '${started['jobId']}';
-      while (mounted) {
-        final state = await NovelAuth.googleDriveVerificationJob(jobId);
-        final rows = (state['results'] as List? ?? const [])
-            .whereType<Map>()
-            .map((item) => Map<String, dynamic>.from(item))
-            .toList();
-        setState(() {
-          verificationProgress = 'Verificados: ${state['checked']}/${state['total']} • Certos: ${state['ok']} • Com problemas: ${state['failed']}';
-          verificationResults = rows;
-        });
-        if (['completed', 'completed_with_errors', 'failed'].contains(state['status'])) {
-          if (state['error'] != null) {
-            setState(() => error = '${state['error']}');
-          }
-          break;
-        }
-        await Future<void>.delayed(const Duration(seconds: 3));
-      }
-    } catch (e) {
-      if (mounted) setState(() => error = e.toString());
-    } finally {
-      if (mounted) setState(() => verifying = false);
-    }
-  }
-
-  Future<void> _recover() async {
-    if (selected.isEmpty || running) return;
-    final ids = selected.toList();
-    final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-      title: const Text('Testar recuperação'),
-      content: Text('O NovelPlay vai substituir o conteúdo de ${ids.length} arquivo(s) existente(s) no Drive, preservando os links. Para o primeiro teste, selecione apenas um episódio.'),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Confirmar')),
-      ],
-    ));
-    if (ok != true) return;
-    setState(() { running = true; error = null; progress = 'Iniciando...'; });
-    try {
-      final started = await NovelAuth.startGoogleDriveRecovery(ids);
-      final jobId = '${started['jobId']}';
-      while (mounted) {
-        final state = await NovelAuth.googleDriveRecoveryJob(jobId);
-        final episodeResults = (state['episodes'] as List? ?? const [])
-            .whereType<Map>()
-            .map((item) => Map<String, dynamic>.from(item))
-            .toList();
-        setState(() {
-          progress = 'Recuperados: ${state['recovered']}/${state['total']} • Falhas: ${state['failed']} • Pendentes: ${state['pending']}';
-          results = episodeResults;
-        });
-        if (['completed', 'completed_with_errors', 'failed'].contains(state['status'])) break;
-        await Future<void>.delayed(const Duration(seconds: 5));
-      }
-      if (mounted) await _preview();
-    } catch (e) {
-      if (mounted) setState(() => error = e.toString());
-    } finally {
-      if (mounted) setState(() => running = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => Card(
-    color: const Color(0xff1b1b27),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const Text('Recuperar episódios antigos', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
-        const Text('Procura episódios antigos enviados pelo NovelPlay que ainda têm o link original salvo. Os envios feitos depois da correção de áudio são ignorados. A recuperação atualiza o arquivo existente no Drive, sem criar outra cópia. Teste primeiro com apenas um episódio.',
-          style: TextStyle(color: Colors.white70, height: 1.35)),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: verifying || running ? null : _verifyAllDriveVideos,
-          icon: verifying ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.verified_outlined),
-          label: Text(verifying ? 'Verificando vídeos...' : 'Verificar todos os vídeos no Drive'),
-        ),
-        if (verificationProgress != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text(verificationProgress!, style: const TextStyle(color: Colors.lightGreenAccent)),
-          ),
-        if (verificationResults.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          const Text('Resultado da verificação', style: TextStyle(fontWeight: FontWeight.bold)),
-          for (final item in verificationResults)
-            ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(
-                item['status'] == 'ok' ? Icons.check_circle : Icons.error,
-                color: item['status'] == 'ok' ? Colors.greenAccent : Colors.redAccent,
-              ),
-              title: Text('${item['seriesTitle']} • Episódio ${item['episodeNumber']}'),
-              subtitle: Text('${item['message'] ?? 'Verificação concluída'}',
-                style: TextStyle(color: item['status'] == 'ok' ? Colors.white60 : Colors.redAccent)),
-            ),
-        ],
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: loading || running || verifying ? null : _preview,
-          icon: loading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.search),
-          label: Text(loading ? 'Procurando...' : 'Ver episódios recuperáveis'),
-        ),
-        if (items.isNotEmpty) ...[
-          Text('Episódios ainda recuperáveis: ${items.length} • Já recuperados desaparecem desta lista.',
-            style: const TextStyle(color: Colors.white70, fontSize: 12)),
-          for (final item in items)
-            if (item['hasSourceUrl'] == true &&
-                ['not_checked', 'failed'].contains(item['recoveryStatus']))
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                value: selected.contains('${item['id']}'),
-                onChanged: running ? null : (value) => setState(() {
-                  final id = '${item['id']}';
-                  if (value == true) {
-                    if (selected.length >= 100) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Selecione no máximo 100 episódios por vez.')),
-                      );
-                    } else {
-                      selected.add(id);
-                    }
-                  } else {
-                    selected.remove(id);
-                  }
-                }),
-                title: Text('${item['seriesTitle']}'),
-                subtitle: Text('Episódio ${item['episodeNumber']}'),
-                activeColor: const Color(0xffff6b9d),
-                controlAffinity: ListTileControlAffinity.leading,
-              ),
-          FilledButton.icon(
-            onPressed: selected.isEmpty || running ? null : _recover,
-            icon: running ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.build_circle_outlined),
-            label: Text(running ? 'Recuperando...' : 'Recuperar selecionados (${selected.length})'),
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xffff6b9d)),
-          ),
-        ] else if (!loading && error == null) ...[
-          Text(consulted
-              ? 'Nenhum episódio disponível para recuperação foi encontrado.'
-              : 'A consulta da lista ainda não começou.',
-            style: const TextStyle(color: Colors.white60)),
-          if (consulted && diagnostics.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text('Diagnóstico: ${diagnostics['totalWithDriveFile'] ?? 0} episódios com arquivo no Drive; '
-              '${diagnostics['eligible'] ?? 0} elegíveis; '
-              '${diagnostics['missingSource'] ?? 0} sem link original; '
-              '${diagnostics['ignoredStatus'] ?? 0} ignorados por status.',
-              style: const TextStyle(color: Colors.white60, fontSize: 12)),
-          ],
-        ],
-        if (progress != null) Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: Text(progress!, style: const TextStyle(color: Colors.lightGreenAccent)),
-        ),
-        if (results.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          const Text('Resultado automático por episódio', style: TextStyle(fontWeight: FontWeight.bold)),
-          for (final item in results)
-            ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(
-                item['status'] == 'recovered' ? Icons.check_circle
-                  : item['status'] == 'failed' ? Icons.error
-                  : Icons.hourglass_top,
-                color: item['status'] == 'recovered' ? Colors.greenAccent
-                  : item['status'] == 'failed' ? Colors.redAccent
-                  : Colors.orangeAccent,
-              ),
-              title: Text('${item['seriesTitle']} • Episódio ${item['episodeNumber']}'),
-              subtitle: item['status'] == 'failed' && '${item['error']}'.isNotEmpty
-                  ? Text('${item['error']}', style: const TextStyle(color: Colors.redAccent))
-                  : Text(item['status'] == 'recovered' ? 'Arquivo MP4 atualizado e áudio incluído na conversão'
-                      : item['status'] == 'failed' ? 'Falha na recuperação' : 'Em processamento'),
-            ),
-        ],
-        if (error != null) Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: Text(error!, style: const TextStyle(color: Colors.redAccent)),
-        ),
-      ]),
-    ),
-  );
-}
-
 class AdminUsersScreen extends StatefulWidget {
   const AdminUsersScreen({super.key});
   @override
@@ -843,7 +448,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     backgroundColor: const Color(0xff101018),
     appBar: AppBar(title: const Text('Painel administrativo'), actions: [
       IconButton(tooltip: 'Atualizar', onPressed: _reload, icon: const Icon(Icons.refresh)),
-    ], bottom: const TabBar(tabs: [Tab(text: 'USUÁRIOS'), Tab(text: 'CATÁLOGO'), Tab(text: 'GOOGLE DRIVE')])),
+    ], bottom: const TabBar(tabs: [Tab(text: 'USUÁRIOS'), Tab(text: 'CATÁLOGO'), Tab(text: 'DRIVE MANUAL')])),
     floatingActionButton: Builder(builder: (ctx) => FloatingActionButton.extended(
       onPressed: () { if (DefaultTabController.of(ctx).index == 1) _createSeries(); else _reload(); },
       icon: const Icon(Icons.add), label: const Text('Nova novelinha'),
@@ -885,7 +490,32 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           if (series.isEmpty) const Padding(padding: EdgeInsets.all(20), child: Text('Nenhuma novelinha cadastrada no catálogo administrativo.')),
         ]);
       }),
-      const GoogleDriveAdminScreen(),
+      const _ManualDriveInfoScreen(),
     ]),
   ));
+}
+
+
+class _ManualDriveInfoScreen extends StatelessWidget {
+  const _ManualDriveInfoScreen();
+
+  @override
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.all(24),
+    children: const [
+      Icon(Icons.cloud_upload_outlined, size: 58, color: Color(0xffff6b9d)),
+      SizedBox(height: 16),
+      Text('Google Drive manual', textAlign: TextAlign.center,
+        style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold)),
+      SizedBox(height: 12),
+      Text(
+        'O NovelPlay não envia nem recupera episódios automaticamente. '
+        'Baixe os vídeos no seu dispositivo e envie-os manualmente pelo aplicativo Google Drive '
+        'para a pasta de novelinhas compartilhada com o NovelPlay. '
+        'A aba Meu Drive continua sendo usada para consultar e assistir aos arquivos disponíveis.',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: Colors.white70, height: 1.5),
+      ),
+    ],
+  );
 }
