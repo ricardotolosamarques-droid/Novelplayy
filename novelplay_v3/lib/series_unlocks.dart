@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class NovelSeriesUnlocks {
-  static const String _baseUrl = 'https://novelplay-api-ee5f.onrender.com';
+  static const String _baseUrl = 'https://novelplayy-a2dd0.containers.snapdeploy.app';
 
   static Future<Map<String, String>> _headers() async {
     final prefs = await SharedPreferences.getInstance();
