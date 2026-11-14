@@ -372,14 +372,21 @@ async function getReelShortBookshelf(type) {
   const shelves = findReelShortShelfList(payload && payload.pageProps);
   if (!shelves) throw new Error('O ReelShort não retornou as categorias do catálogo.');
 
-  const terms = {
-    recommended: ['recomendado', 'recommended'],
-    newrelease: ['lançamento', 'lancamento', 'new release'],
-    dramadub: ['dublado', 'dublada', 'drama com dub', 'dubbed']
+  // Os nomes das estantes variam conforme o idioma retornado pelo ReelShort.
+  // A API original também recebe os nomes em indonésio.
+  const normalizeShelfName = value => String(value || '')
+    .normalize('NFD')
+    .replace(/[\\u0300-\\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
+  const shelfAliases = {
+    recommended: ['recomendado', 'recommended', 'direkomendasikan'],
+    newrelease: ['lancamento', 'newrelease', 'rilisbaru'],
+    dramadub: ['dublado', 'dublada', 'dramacomdub', 'dubbed', 'dramadengandub']
   }[type] || [];
   const shelf = shelves.find(item => {
-    const name = String(item && item.bookshelf_name || '').toLowerCase();
-    return terms.some(term => name.includes(term));
+    const name = normalizeShelfName(item && item.bookshelf_name);
+    return shelfAliases.some(alias => name.includes(normalizeShelfName(alias)));
   });
 
   const rawBooks = shelf && Array.isArray(shelf.books) ? shelf.books : [];
