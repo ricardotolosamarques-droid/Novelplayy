@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 import 'catalog.dart';
 
-const _catalogApi = 'https://novelplay-api-ee5f.onrender.com';
+const _catalogApi = 'https://novelplayy-a2dd0.containers.snapdeploy.app';
 
 class ReelShortCatalogScreen extends StatefulWidget {
   final bool isAdmin;
