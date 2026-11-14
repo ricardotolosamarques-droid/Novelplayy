@@ -341,6 +341,29 @@ function findReelShortShelfList(value, depth = 0) {
   return null;
 }
 
+async function resolveReelShortBookId(filteredTitle, bookTitle) {
+  // A API original do GitHub informa que os livros da estante podem vir
+  // sem book_id. Nesse caso, ela resolve o identificador pela busca.
+  const keywords = String(bookTitle || filteredTitle || '').trim();
+  if (!keywords) return '';
+  try {
+    const query = new URLSearchParams({ keywords }).toString();
+    const data = await reelShortJson('/search.json?' + query);
+    const results = data && data.pageProps && Array.isArray(data.pageProps.books)
+      ? data.pageProps.books : [];
+    const exact = results.find(book =>
+      normalizeReelShortSlug(book.filtered_title || book.book_title) === filteredTitle
+    );
+    const match = exact || results.find(book =>
+      normalizeReelShortSlug(book.book_title) === filteredTitle
+    );
+    return String(match && (match._id || match.book_id) || '');
+  } catch (error) {
+    console.warn('Não foi possível resolver book_id de', keywords, error.message);
+    return '';
+  }
+}
+
 async function getReelShortBookshelf(type) {
   const cached = reelShortShelfCache.get(type);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
@@ -359,16 +382,26 @@ async function getReelShortBookshelf(type) {
     return terms.some(term => name.includes(term));
   });
 
-  const books = (shelf && Array.isArray(shelf.books) ? shelf.books : [])
-    .map(book => ({
-      book_id: String(book._id || book.book_id || ''),
-      book_title: String(book.book_title || ''),
-      filtered_title: normalizeReelShortSlug(book.filtered_title || book.book_title),
-      book_pic: String(book.book_pic || ''),
-      special_desc: String(book.special_desc || ''),
-      chapter_count: Number(book.chapter_count || 0)
-    }))
-    .filter(book => book.book_id && book.book_title && book.filtered_title);
+  const rawBooks = shelf && Array.isArray(shelf.books) ? shelf.books : [];
+  const books = [];
+  // Reproduz o comportamento do projeto wanglinsaputra/Rest-Api-ReelShort:
+  // estantes frequentemente omitem book_id; a busca individual completa-o.
+  for (const raw of rawBooks) {
+    const bookTitle = String(raw.book_title || '');
+    const filteredTitle = normalizeReelShortSlug(raw.filtered_title || bookTitle);
+    if (!bookTitle || !filteredTitle) continue;
+    let bookId = String(raw._id || raw.book_id || '');
+    if (!bookId) bookId = await resolveReelShortBookId(filteredTitle, bookTitle);
+    if (!bookId) continue;
+    books.push({
+      book_id: bookId,
+      book_title: bookTitle,
+      filtered_title: filteredTitle,
+      book_pic: String(raw.book_pic || ''),
+      special_desc: String(raw.special_desc || ''),
+      chapter_count: Number(raw.chapter_count || 0)
+    });
+  }
 
   const value = {
     bookshelf_name: String(shelf && shelf.bookshelf_name || type),
