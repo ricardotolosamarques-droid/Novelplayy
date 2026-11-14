@@ -14,6 +14,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - name: Validar sintaxe do backend ReelShort
+        run: node --check novelplay_api/server.js
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
