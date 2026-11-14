@@ -248,21 +248,21 @@ class _HomeState extends State<Home> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Informe o endereço HTTPS de uma API compatível, '
-                'terminando em /api/v1/reelshort.'),
+            const Text('Informe o endereço HTTPS da API ReelShort, '
+                'terminando em /reelshort.'),
             const SizedBox(height: 12),
             TextField(
               controller: controller,
               keyboardType: TextInputType.url,
               decoration: const InputDecoration(
                 labelText: 'Endereço da API',
-                hintText: 'https://seu-servidor/api/v1/reelshort',
+                hintText: 'https://novelplay-api-ee5f.onrender.com/reelshort',
               ),
             ),
             const SizedBox(height: 10),
             const Text(
-              'O catálogo pode ser consultado pelo aplicativo. '
-              'A reprodução de vídeos ReelShort não é fornecida por esta integração.',
+              'O catálogo inclui busca, lançamentos e títulos marcados como dublados. '
+              'A reprodução independente fica limitada aos episódios públicos gratuitos.',
               style: TextStyle(fontSize: 12),
             ),
           ],
@@ -346,6 +346,14 @@ class _HomeState extends State<Home> {
                 const SizedBox(height: 4),
                 Text(result.origin,
                     style: const TextStyle(color: Colors.white70)),
+                if (shelf == 'dramadub')
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Títulos marcados como dublados pelo ReelShort. O idioma da faixa pode variar conforme a região e cada novelinha.',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ),
                 if (result.warning != null)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 10),
