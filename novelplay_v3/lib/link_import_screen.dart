@@ -15,12 +15,10 @@ class LinkImportScreen extends StatefulWidget {
 class _LinkImportScreenState extends State<LinkImportScreen> {
   final _title = TextEditingController(), _synopsis = TextEditingController(), _cover = TextEditingController(), _links = TextEditingController();
   bool _authorized = false, _busy = false, _metadataBusy = false;
-  String? _error, _metadataStatus, _uploadStatus;
+  String? _error, _metadataStatus, _statusText;
   List<Map<String, dynamic>> _metadataCandidates = [];
-  List<Map<String, dynamic>> _driveJobs = [];
-  bool _driveJobsBusy = false;
   @override
-  void initState() { super.initState(); _loadQueue(); _loadDriveJobs(); }
+  void initState() { super.initState(); _loadQueue(); }
   Future<void> _loadQueue() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString(_queueKey) ?? '';
@@ -133,96 +131,11 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
     return prefs.getString(_tokenKey);
   }
 
-  Future<void> _loadDriveJobs() async {
-    if (mounted) setState(() => _driveJobsBusy = true);
-    try {
-      final token = await _getToken();
-      if (token == null) return;
-      final response = await http.get(
-        Uri.parse('$_api/admin/catalog/import-jobs'),
-        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
-      ).timeout(const Duration(seconds: 20));
-      final data = jsonDecode(utf8.decode(response.bodyBytes));
-      if (response.statusCode != 200) {
-        throw Exception(data is Map ? (data['error'] ?? 'Falha ao consultar envios') : 'Falha ao consultar envios');
-      }
-      final jobs = data is Map && data['jobs'] is List
-          ? (data['jobs'] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
-          : <Map<String, dynamic>>[];
-      if (mounted) setState(() => _driveJobs = jobs);
-    } catch (e) {
-      if (mounted) setState(() => _error = 'Não consegui consultar os envios anteriores: ${e.toString().replaceFirst('Exception: ', '')}');
-    } finally {
-      if (mounted) setState(() => _driveJobsBusy = false);
-    }
-  }
-
-  Future<void> _retryDriveJob(String jobId) async {
-    if (_busy) return;
-    setState(() { _busy = true; _error = null; _uploadStatus = 'Preparando a retomada do envio...'; });
-    try {
-      final token = await _getToken();
-      if (token == null) throw Exception('Sua sessão expirou. Entre novamente.');
-      final response = await http.post(
-        Uri.parse('$_api/admin/catalog/import-jobs/$jobId/retry'),
-        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
-      ).timeout(const Duration(seconds: 30));
-      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception(data['error'] ?? 'Não foi possível retomar o envio.');
-      }
-      if (data['retried'] == false) {
-        await _loadDriveJobs();
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Todos os episódios desse envio já estão no Google Drive.')));
-        return;
-      }
-      final result = await _waitForUpload(token, jobId);
-      await _loadDriveJobs();
-      if (!mounted) return;
-      final uploaded = (result['uploaded'] as num?)?.toInt() ?? 0;
-      final failed = (result['failed'] as num?)?.toInt() ?? 0;
-      final total = (result['total'] as num?)?.toInt() ?? 0;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(failed == 0
-          ? '$uploaded de $total episódios salvos no Google Drive.'
-          : '$uploaded de $total salvos; $failed ainda falharam.'),
-        duration: const Duration(seconds: 7),
-      ));
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
-      await _loadDriveJobs();
-    } finally {
-      if (mounted) setState(() { _busy = false; _uploadStatus = null; });
-    }
-  }
-
-  Future<Map<String, dynamic>> _waitForUpload(String token, String jobId) async {
-    final deadline = DateTime.now().add(const Duration(minutes: 30));
-    while (DateTime.now().isBefore(deadline)) {
-      final response = await http.get(
-        Uri.parse('$_api/admin/catalog/import-jobs/$jobId'),
-        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
-      ).timeout(const Duration(seconds: 20));
-      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception(data['error'] ?? 'Não foi possível consultar o envio ao Drive.');
-      }
-      final status = (data['status'] ?? '').toString();
-      final uploaded = data['uploaded'] ?? 0;
-      final failed = data['failed'] ?? 0;
-      final total = data['total'] ?? 0;
-      if (mounted) setState(() => _uploadStatus = 'Enviando para o Drive: ' + (uploaded + failed).toString() + ' de ' + total.toString() + ' episódios processados.');
-      if (status == 'completed' || status == 'completed_with_errors' || status == 'failed') return data;
-      await Future.delayed(const Duration(seconds: 3));
-    }
-    throw Exception('O envio continua no servidor, mas demorou mais que o esperado. Você pode voltar ao catálogo; a transferência continuará em segundo plano.');
-  }
-
   Future<void> _import() async {
     final links = _extractLinks();
     if (_title.text.trim().isEmpty) { setState(() => _error = 'Informe o nome da novelinha.'); return; }
     if (links.isEmpty) { setState(() => _error = 'Não encontrei links HTTPS válidos.'); return; }
-    if (!_authorized) { setState(() => _error = 'Confirme que possui autorização para reproduzir e distribuir estes vídeos.'); return; }
+    if (!_authorized) { setState(() => _error = 'Confirme que possui autorização para reproduzir estes vídeos.'); return; }
     final used = <int>{};
     final episodes = <Map<String, dynamic>>[];
     for (var i = 0; i < links.length; i++) {
@@ -230,7 +143,7 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
       while (!used.add(number)) { number++; }
       episodes.add({'number': number, 'title': 'Episódio $number', 'videoUrl': links[i].toString()});
     }
-    setState(() { _busy = true; _error = null; _uploadStatus = 'Preparando os episódios para envio...'; });
+    setState(() { _busy = true; _error = null; _statusText = 'Cadastrando links no catálogo...'; });
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString(_tokenKey);
@@ -242,36 +155,26 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
         .timeout(const Duration(seconds: 45));
       final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception(data['error'] ?? 'Falha ao iniciar importação (HTTP ' + response.statusCode.toString() + ').');
+        throw Exception(data['error'] ?? 'Falha ao cadastrar episódios (HTTP ${response.statusCode}).');
       }
       final duplicateCount = (data['duplicateCount'] as num?)?.toInt() ?? 0;
-      if (data['duplicateOnly'] == true) {
-        await prefs.remove(_queueKey);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('$duplicateCount link(s) já estavam cadastrados. Nenhum episódio foi enviado novamente.'),
-          duration: const Duration(seconds: 6),
-        ));
-        Navigator.pop(context, true);
-        return;
-      }
-      final jobId = (data['jobId'] ?? '').toString();
-      if (jobId.isEmpty) throw Exception('O servidor não retornou o identificador do envio ao Drive.');
-      final result = await _waitForUpload(token, jobId);
+      final episodeCount = (data['episodeCount'] as num?)?.toInt() ?? 0;
       await prefs.remove(_queueKey);
       if (!mounted) return;
-      final uploaded = result['uploaded'] ?? 0;
-      final failed = result['failed'] ?? 0;
-      final total = result['total'] ?? episodes.length;
-      final duplicateMessage = duplicateCount > 0 ? ' $duplicateCount link(s) repetido(s) foram ignorados.' : '';
-      final message = (failed == 0
-        ? uploaded.toString() + ' de ' + total.toString() + ' episódios salvos no Google Drive.'
-        : uploaded.toString() + ' de ' + total.toString() + ' salvos no Drive; ' + failed.toString() + ' falharam. Verifique se os links são downloads diretos e não exigem login.') + duplicateMessage;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 7)));
+      final extra = duplicateCount > 0 ? ' $duplicateCount link(s) repetido(s) foram ignorados.' : '';
+      final message = episodeCount == 0
+        ? 'Todos os links já estavam cadastrados no catálogo.'
+        : '$episodeCount episódio(s) cadastrado(s) no catálogo.$extra';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('$message Os arquivos devem ser enviados manualmente ao Google Drive.'),
+        duration: const Duration(seconds: 8),
+      ));
       Navigator.pop(context, true);
     } catch (error) {
       if (mounted) setState(() => _error = error.toString().replaceFirst('Exception: ', ''));
-    } finally { if (mounted) setState(() { _busy = false; _uploadStatus = null; }); }
+    } finally {
+      if (mounted) setState(() { _busy = false; _statusText = null; });
+    }
   }
   @override
   void dispose() { _title.dispose(); _synopsis.dispose(); _cover.dispose(); _links.dispose(); super.dispose(); }
@@ -280,27 +183,6 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
     appBar: AppBar(title: const Text('Importar do 1DM')),
     body: ListView(padding: const EdgeInsets.all(18), children: [
       const Text('No 1DM, use Compartilhar e escolha NovelPlay. Você também pode colar vários links de uma vez.', style: TextStyle(color: Colors.white70)),
-      if (_driveJobsBusy || _driveJobs.isNotEmpty) ...[
-        Row(children: [
-          const Expanded(child: Text('Envios anteriores ao Google Drive', style: TextStyle(fontWeight: FontWeight.bold))),
-          IconButton(onPressed: _driveJobsBusy ? null : _loadDriveJobs, icon: const Icon(Icons.refresh), tooltip: 'Atualizar envios'),
-        ]),
-        if (_driveJobsBusy) const LinearProgressIndicator(),
-        for (final job in _driveJobs)
-          Card(
-            child: ListTile(
-              title: Text((job['title'] ?? 'Novelinha').toString(), maxLines: 1, overflow: TextOverflow.ellipsis),
-              subtitle: Text('${job['uploaded'] ?? 0} enviados • ${job['failed'] ?? 0} falharam • ${job['pending'] ?? 0} pendentes de ${job['total'] ?? 0}'),
-              trailing: ((job['failed'] as num?) ?? 0) > 0 || (job['status'] == 'failed')
-                ? TextButton(
-                    onPressed: _busy ? null : () => _retryDriveJob((job['jobId'] ?? '').toString()),
-                    child: const Text('Tentar novamente'),
-                  )
-                : const Icon(Icons.sync, size: 20),
-            ),
-          ),
-        const SizedBox(height: 10),
-      ],
       const SizedBox(height: 18),
       TextField(controller: _title, onSubmitted: (_) => _lookupMetadata(), decoration: InputDecoration(labelText: 'Nome da novelinha', suffixIcon: IconButton(onPressed: _metadataBusy ? null : _lookupMetadata, icon: const Icon(Icons.search), tooltip: 'Buscar capa e sinopse'))),
       const SizedBox(height: 12),
@@ -329,9 +211,9 @@ class _LinkImportScreenState extends State<LinkImportScreen> {
       const SizedBox(height: 8),
       Text('${_extractLinks().length} links válidos • numeração automática', style: const TextStyle(color: Colors.white70, fontSize: 12)),
       CheckboxListTile(contentPadding: EdgeInsets.zero, value: _authorized, onChanged: (v) => setState(() => _authorized = v ?? false), title: const Text('Tenho autorização para reproduzir e distribuir estes vídeos.'), controlAffinity: ListTileControlAffinity.leading),
-      if (_uploadStatus != null) Padding(padding: const EdgeInsets.only(bottom: 10), child: Text(_uploadStatus!, style: const TextStyle(color: Colors.white70))),
+      if (_statusText != null) Padding(padding: const EdgeInsets.only(bottom: 10), child: Text(_statusText!, style: const TextStyle(color: Colors.white70))),
       if (_error != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(_error!, style: const TextStyle(color: Colors.redAccent))),
-      FilledButton.icon(onPressed: _busy ? null : _import, icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.cloud_upload_outlined), label: Text(_busy ? 'Enviando para o Google Drive...' : 'Enviar ${_extractLinks().length} episódios para o Drive')),
+      FilledButton.icon(onPressed: _busy ? null : _import, icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.cloud_upload_outlined), label: Text(_busy ? 'Cadastrando episódios...' : 'Cadastrar ${_extractLinks().length} episódios no catálogo')),
     ]),
   );
 }
