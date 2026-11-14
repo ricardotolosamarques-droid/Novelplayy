@@ -196,7 +196,7 @@ jobs:
           API_INDEX_PATH: ${{ vars.API_INDEX_PATH }}
           API_INFO_PATH: ${{ vars.API_INFO_PATH }}
           API_INFO_ID_PARAM: ${{ vars.API_INFO_ID_PARAM }}
-          REELSHORT_API_URL: ${{ vars.REELSHORT_API_URL }}
+          REELSHORT_API_URL: https://novelplay-api-ee5f.onrender.com/reelshort
         run: |
           args=("--dart-define=CATALOG_URL=$CATALOG_URL" "--dart-define=API_BASE_URL=$API_BASE_URL" "--dart-define=DRIVE_API_KEY=${{ secrets.DRIVE_API_KEY }}")
           if [[ -n "$REELSHORT_API_URL" ]]; then args+=("--dart-define=REELSHORT_API_URL=$REELSHORT_API_URL"); fi
