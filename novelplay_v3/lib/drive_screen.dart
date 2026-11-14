@@ -113,7 +113,7 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
 
   Future<List<Map<String, dynamic>>> _loadPublishedCatalog() async {
     final response = await http.get(
-      Uri.parse('https://novelplay-api-ee5f.onrender.com/catalog'),
+      Uri.parse('https://novelplayy-a2dd0.containers.snapdeploy.app/catalog'),
     ).timeout(const Duration(seconds: 25));
     if (response.statusCode != 200) {
       throw Exception('Catálogo respondeu HTTP ${response.statusCode}.');
