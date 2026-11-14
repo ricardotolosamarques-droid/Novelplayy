@@ -256,7 +256,7 @@ class _HomeState extends State<Home> {
               keyboardType: TextInputType.url,
               decoration: const InputDecoration(
                 labelText: 'Endereço da API',
-                hintText: 'https://novelplay-api-ee5f.onrender.com/reelshort',
+                hintText: 'https://novelplayy-a2dd0.containers.snapdeploy.app/reelshort',
               ),
             ),
             const SizedBox(height: 10),
