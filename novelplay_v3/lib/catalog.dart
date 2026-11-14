@@ -179,8 +179,26 @@ class Sources {
         if (entries is! List) {
           throw const FormatException('API não retornou lista de títulos');
         }
-        final titles = entries
-            .whereType<Map>()
+        var selectedEntries = entries.whereType<Map>().toList();
+        if (term.isNotEmpty && allowedShelf == 'dramadub') {
+          final dubbedUri = proxyEndpoint('/dramadub');
+          if (dubbedUri == null) {
+            throw const FormatException('API ReelShort não configurada');
+          }
+          final dubbedBody = await request(dubbedUri);
+          final dubbedBooks = dubbedBody is Map ? dubbedBody['books'] : null;
+          if (dubbedBooks is! List) {
+            throw const FormatException('API não retornou a lista de dublados');
+          }
+          final dubbedIds = dubbedBooks
+              .whereType<Map>()
+              .map((item) => (item['book_id'] ?? '').toString())
+              .where((id) => id.isNotEmpty)
+              .toSet();
+          selectedEntries = selectedEntries.where((item) =>
+              dubbedIds.contains((item['book_id'] ?? '').toString())).toList();
+        }
+        final titles = selectedEntries
             .map((item) => Novel.fromReelShortBook(
                   Map<String, dynamic>.from(item),
                   genre: allowedShelf == 'dramadub' ? 'Dublado • ReelShort' : 'ReelShort',
