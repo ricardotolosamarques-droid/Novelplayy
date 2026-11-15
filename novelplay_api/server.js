@@ -920,3 +920,4 @@ initializeDatabase()
     console.error('Falha ao inicializar banco:', error.message);
     process.exit(1);
   });
+// Redeploy: reativar a implantação automática após o limite do SnapDeploy.
