@@ -73,6 +73,7 @@ class Catalog {
   const Catalog(this.novels, this.origin, [this.warning]);
 }
 
+// Catálogo ReelShort: busca automática nas estantes públicas da API.
 class Sources {
   static String reelshortApiUrl =
       const String.fromEnvironment('REELSHORT_API_URL',
