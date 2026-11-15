@@ -573,7 +573,7 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
                   : episode['sourceIsFree'] == true
                       ? 'Episódio gratuito · assistir'
                       : episode['sourceIsFree'] == false
-                          ? 'Episódio pago no ReelShort'
+                          ? 'Episódio pago · consultar disponibilidade'
                           : 'Disponibilidade não informada'),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                 if (widget.isAdmin)
@@ -582,14 +582,14 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
                     icon: const Icon(Icons.link, color: Color(0xffff6b9d)),
                     onPressed: () => _addEpisode(existing: episode),
                   ),
-                Icon((episode['videoUrl'] ?? '').toString().isEmpty ? Icons.lock_outline : Icons.play_circle_outline, color: const Color(0xffff6b9d)),
+                Icon((episode['videoUrl'] ?? '').toString().isNotEmpty || widget.series['sourceCatalog'] == 'reelshort' ? Icons.play_circle_outline : Icons.lock_outline, color: const Color(0xffff6b9d)),
               ]),
               onTap: (episode['videoUrl'] ?? '').toString().isNotEmpty
                   ? () => Navigator.push(context, MaterialPageRoute(builder: (_) => _AuthorizedHlsPlayer(
                       title: (episode['title'] ?? 'Episódio $number').toString(),
                       url: (episode['videoUrl'] ?? '').toString(),
                     )))
-                  : episode['sourceIsFree'] == true && widget.series['sourceCatalog'] == 'reelshort'
+                  : widget.series['sourceCatalog'] == 'reelshort'
                       ? () => _playSourceEpisode(episode)
                       : null,
             );
