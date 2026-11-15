@@ -607,8 +607,16 @@ app.get('/reelshort/video/:bookId/:episodeNumber', reelShortLimiter, async (req,
     if (!requested) {
       return res.status(404).json({ error: 'Episódio não encontrado na lista pública da ReelShort.' });
     }
-    // Não bloqueia pela etiqueta free/paid: consulta o endpoint público do episódio.
-    // A reprodução só é retornada se a própria fonte fornecer uma URL HTTPS.
+    // Bloqueio obrigatório: somente episódios marcados como gratuitos pela
+    // página pública do ReelShort podem chegar à consulta de vídeo.
+    const paidStart = Number(found.details && found.details.paid_start);
+    const isPaid = Number(found.details && found.details.is_paid);
+    const isFree = isPaid === 0 && Number.isSafeInteger(paidStart) && paidStart === 0
+      ? true
+      : Number.isSafeInteger(paidStart) && paidStart > 0 && episodeNumber < paidStart;
+    if (!isFree) {
+      return res.status(403).json({ error: 'Este episódio é pago no ReelShort e permanece bloqueado no NovelPlay.' });
+    }
     const videoUrl = await getReelShortVideoUrl(episodeNumber, filteredTitle, bookId, chapterId);
     if (!isHttpsUrl(videoUrl)) {
       return res.status(404).json({ error: 'Vídeo público indisponível para este episódio.' });
