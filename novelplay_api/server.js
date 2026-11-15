@@ -600,20 +600,15 @@ app.get('/reelshort/video/:bookId/:episodeNumber', reelShortLimiter, async (req,
   }
   try {
     const found = await getReelShortBookDetails(filteredTitle + '-' + bookId);
-    const details = found.details;
-    const paidStart = Number(details.paid_start);
-    const isPaid = Number(details.is_paid);
     const requested = found.episodes.find(item =>
       Number(item.serial_number || item.episode || item.episode_number || 0) === episodeNumber &&
       String(item.chapter_id || item.chapterId || item._id || '') === chapterId
     );
-    const free = requested && (
-      (isPaid === 0 && Number.isSafeInteger(paidStart) && paidStart === 0) ||
-      (Number.isSafeInteger(paidStart) && paidStart > 0 && episodeNumber < paidStart)
-    );
-    if (!free) {
-      return res.status(403).json({ error: 'Este episódio não está marcado como gratuito no ReelShort.' });
+    if (!requested) {
+      return res.status(404).json({ error: 'Episódio não encontrado na lista pública da ReelShort.' });
     }
+    // Não bloqueia pela etiqueta free/paid: consulta o endpoint público do episódio.
+    // A reprodução só é retornada se a própria fonte fornecer uma URL HTTPS.
     const videoUrl = await getReelShortVideoUrl(episodeNumber, filteredTitle, bookId, chapterId);
     if (!isHttpsUrl(videoUrl)) {
       return res.status(404).json({ error: 'Vídeo público indisponível para este episódio.' });
