@@ -229,7 +229,7 @@ class Sources {
 
   static Future<Uri> resolveReelShortVideo(Novel novel, Episode episode) async {
     if (!novel.fromReelShort || novel.id.isEmpty ||
-        episode.chapterId.isEmpty) {
+        episode.chapterId.isEmpty || !episode.isFree) {
       throw const FormatException('Episódio indisponível para reprodução aqui');
     }
     final url = proxyEndpoint(
