@@ -39,8 +39,28 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
   }
 
   Future<List<Map<String, dynamic>>> _load() async {
-    final data = await _api('/catalog');
-    return (data['series'] as List? ?? []).whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+    // A tela pública usa o catálogo automático do ReelShort, não o /catalog
+    // administrativo que contém somente séries cadastradas manualmente.
+    final data = await _api('/reelshort/recommended');
+    final books = data['books'];
+    if (books is! List) {
+      throw Exception('A API ReelShort não retornou a lista de novelinhas.');
+    }
+    return books.whereType<Map>().map((raw) {
+      final book = Map<String, dynamic>.from(raw);
+      return <String, dynamic>{
+        'id': (book['book_id'] ?? '').toString(),
+        'title': (book['book_title'] ?? 'Novelinha').toString(),
+        'synopsis': (book['special_desc'] ?? '').toString(),
+        'coverUrl': (book['book_pic'] ?? '').toString(),
+        'sourceBookId': (book['book_id'] ?? '').toString(),
+        'sourceFilteredTitle': (book['filtered_title'] ?? '').toString(),
+        'sourceCatalog': 'reelshort',
+        'episodes': <Map<String, dynamic>>[],
+      };
+    }).where((item) =>
+        (item['sourceBookId'] as String).isNotEmpty &&
+        (item['sourceFilteredTitle'] as String).isNotEmpty).toList();
   }
   void _refresh() => setState(() => _request = _load());
 
@@ -278,6 +298,82 @@ class _ReelShortSeriesScreen extends StatefulWidget {
 }
 
 class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
+  bool _sourceLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if ((widget.series['sourceCatalog'] ?? '') == 'reelshort') {
+      _loadSourceEpisodes();
+    }
+  }
+
+  Future<void> _loadSourceEpisodes() async {
+    final bookId = (widget.series['sourceBookId'] ?? '').toString();
+    final slug = (widget.series['sourceFilteredTitle'] ?? '').toString();
+    if (bookId.isEmpty || slug.isEmpty) return;
+    setState(() => _sourceLoading = true);
+    try {
+      final uri = Uri.parse('$_catalogApi/reelshort/episodes/${Uri.encodeComponent(bookId)}')
+          .replace(queryParameters: {'filtered_title': slug});
+      final data = await Sources.request(uri);
+      if (data is! Map || data['episodes'] is! List) {
+        throw Exception('A API não retornou os episódios desta novelinha.');
+      }
+      final episodes = <Map<String, dynamic>>[];
+      for (final raw in data['episodes'] as List) {
+        if (raw is! Map) continue;
+        final number = int.tryParse((raw['episode'] ?? '').toString());
+        final chapterId = (raw['chapter_id'] ?? '').toString();
+        if (number == null || number < 1 || chapterId.isEmpty) continue;
+        episodes.add({
+          'number': number,
+          'title': 'Episódio $number',
+          'sourceEpisodeId': chapterId,
+          'sourceIsFree': raw['free'],
+          'videoUrl': '',
+        });
+      }
+      episodes.sort((a, b) => (a['number'] as int).compareTo(b['number'] as int));
+      if (episodes.isEmpty) throw Exception('Nenhum episódio foi encontrado.');
+      if (!mounted) return;
+      setState(() {
+        widget.series['episodes'] = episodes;
+        final book = data['book'];
+        if (book is Map) {
+          if ((book['book_title'] ?? '').toString().isNotEmpty) widget.series['title'] = book['book_title'];
+          if ((book['special_desc'] ?? '').toString().isNotEmpty) widget.series['synopsis'] = book['special_desc'];
+          if ((book['book_pic'] ?? '').toString().isNotEmpty) widget.series['coverUrl'] = book['book_pic'];
+        }
+      });
+    } catch (error) {
+      _show(error.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _sourceLoading = false);
+    }
+  }
+
+  Future<void> _playSourceEpisode(Map<String, dynamic> episode) async {
+    final bookId = (widget.series['sourceBookId'] ?? '').toString();
+    final slug = (widget.series['sourceFilteredTitle'] ?? '').toString();
+    final number = (episode['number'] ?? '').toString();
+    final chapterId = (episode['sourceEpisodeId'] ?? '').toString();
+    try {
+      final uri = Uri.parse('$_catalogApi/reelshort/video/${Uri.encodeComponent(bookId)}/$number')
+          .replace(queryParameters: {'filtered_title': slug, 'chapter_id': chapterId});
+      final data = await Sources.request(uri);
+      final video = data is Map ? Sources.valid((data['video_url'] ?? '').toString()) : null;
+      if (video == null) throw Exception('O vídeo público deste episódio não está disponível.');
+      if (!mounted) return;
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => _AuthorizedHlsPlayer(
+        title: (episode['title'] ?? 'Episódio $number').toString(),
+        url: video.toString(),
+      )));
+    } catch (error) {
+      _show(error.toString().replaceFirst('Exception: ', ''));
+    }
+  }
+
   Future<void> _addEpisode({Map<String, dynamic>? existing}) async {
     final number = TextEditingController(text: existing == null ? '' : (existing['number'] ?? '').toString());
     final title = TextEditingController(text: existing == null ? '' : (existing['title'] ?? '').toString());
@@ -457,8 +553,12 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
         if (widget.isAdmin) IconButton(onPressed: _addEpisodesBatch, icon: const Icon(Icons.playlist_add), tooltip: 'Adicionar vários links'),
         if (widget.isAdmin) IconButton(onPressed: _addEpisode, icon: const Icon(Icons.add), tooltip: 'Adicionar episódio individual'),
       ]),
-      body: episodes.isEmpty
-        ? Center(child: Text(widget.isAdmin ? 'Adicione o primeiro episódio pelo botão +.' : 'Ainda não há episódios cadastrados.'))
+      body: _sourceLoading
+        ? const Center(child: CircularProgressIndicator())
+        : episodes.isEmpty
+          ? Center(child: Text(widget.series['sourceCatalog'] == 'reelshort'
+              ? 'Não foi possível carregar os episódios. Use atualizar para tentar novamente.'
+              : widget.isAdmin ? 'Adicione o primeiro episódio pelo botão +.' : 'Ainda não há episódios cadastrados.'))
         : ListView.builder(
           itemCount: episodes.length,
           itemBuilder: (context, index) {
@@ -470,10 +570,10 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
               subtitle: Text((episode['videoUrl'] ?? '').toString().isNotEmpty
                   ? 'Assistir no NovelPlay'
                   : episode['sourceIsFree'] == true
-                      ? 'Episódio gratuito · vídeo não conectado'
+                      ? 'Episódio gratuito · assistir'
                       : episode['sourceIsFree'] == false
-                          ? 'Episódio pago no ReelShort · vídeo não conectado'
-                          : 'Metadados importados · vídeo não conectado'),
+                          ? 'Episódio pago no ReelShort'
+                          : 'Disponibilidade não informada'),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                 if (widget.isAdmin)
                   IconButton(
@@ -483,10 +583,14 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
                   ),
                 Icon((episode['videoUrl'] ?? '').toString().isEmpty ? Icons.lock_outline : Icons.play_circle_outline, color: const Color(0xffff6b9d)),
               ]),
-              onTap: (episode['videoUrl'] ?? '').toString().isEmpty ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => _AuthorizedHlsPlayer(
-                title: (episode['title'] ?? 'Episódio $number').toString(),
-                url: (episode['videoUrl'] ?? '').toString(),
-              ))),
+              onTap: (episode['videoUrl'] ?? '').toString().isNotEmpty
+                  ? () => Navigator.push(context, MaterialPageRoute(builder: (_) => _AuthorizedHlsPlayer(
+                      title: (episode['title'] ?? 'Episódio $number').toString(),
+                      url: (episode['videoUrl'] ?? '').toString(),
+                    )))
+                  : episode['sourceIsFree'] == true && widget.series['sourceCatalog'] == 'reelshort'
+                      ? () => _playSourceEpisode(episode)
+                      : null,
             );
           },
         ),
