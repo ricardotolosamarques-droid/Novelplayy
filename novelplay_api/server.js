@@ -372,52 +372,66 @@ async function getReelShortBookshelf(type) {
   const shelves = findReelShortShelfList(payload && payload.pageProps);
   if (!shelves) throw new Error('O ReelShort não retornou as categorias do catálogo.');
 
-  // Os nomes das estantes variam conforme o idioma retornado pelo ReelShort.
-  // A API original também recebe os nomes em indonésio.
   const normalizeShelfName = value => String(value || '')
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\\u0300-\\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '');
+
   const shelfAliases = {
-    recommended: ['recomendado', 'recommended', 'direkomendasikan'],
     newrelease: ['lancamento', 'newrelease', 'rilisbaru'],
     dramadub: ['dublado', 'dublada', 'dramacomdub', 'dubbed', 'dramadengandub']
-  }[type] || [];
-  const shelf = shelves.find(item => {
-    const name = normalizeShelfName(item && item.bookshelf_name);
-    return shelfAliases.some(alias => name.includes(normalizeShelfName(alias)));
-  });
+  };
 
-  if (!shelf) {
-    const available = shelves.map(item => String(item && item.bookshelf_name || '')).filter(Boolean);
-    throw new Error('Categoria ReelShort não encontrada: ' + type + '. Categorias recebidas: ' + available.join(' | '));
-  }
-
-  const rawBooks = Array.isArray(shelf.books) ? shelf.books : [];
-  const books = [];
-  // Reproduz o comportamento do projeto wanglinsaputra/Rest-Api-ReelShort:
-  // estantes frequentemente omitem book_id; a busca individual completa-o.
-  for (const raw of rawBooks) {
-    const bookTitle = String(raw.book_title || '');
-    const filteredTitle = normalizeReelShortSlug(raw.filtered_title || bookTitle);
-    if (!bookTitle || !filteredTitle) continue;
-    let bookId = String(raw._id || raw.book_id || '');
-    if (!bookId) bookId = await resolveReelShortBookId(filteredTitle, bookTitle);
-    // Preserve os dados da estante mesmo se a busca não resolver o ID agora.
-    // O app pode exibir capa/título e resolver o ID ao abrir a novelinha.
-    books.push({
-      book_id: bookId,
-      book_title: bookTitle,
-      filtered_title: filteredTitle,
-      book_pic: String(raw.book_pic || ''),
-      special_desc: String(raw.special_desc || ''),
-      chapter_count: Number(raw.chapter_count || 0)
+  // A tela principal reúne os títulos de todas as estantes públicas recebidas.
+  // As telas "lançamentos" e "dublados" continuam usando suas estantes próprias.
+  let selectedShelves;
+  if (type === 'recommended') {
+    selectedShelves = shelves.filter(item => item && Array.isArray(item.books));
+    if (!selectedShelves.length) {
+      throw new Error('O ReelShort não retornou estantes com livros.');
+    }
+  } else {
+    const aliases = shelfAliases[type] || [];
+    const shelf = shelves.find(item => {
+      const name = normalizeShelfName(item && item.bookshelf_name);
+      return aliases.some(alias => name.includes(normalizeShelfName(alias)));
     });
+    if (!shelf) {
+      const available = shelves.map(item => String(item && item.bookshelf_name || '')).filter(Boolean);
+      throw new Error('Categoria ReelShort não encontrada: ' + type + '. Categorias recebidas: ' + available.join(' | '));
+    }
+    selectedShelves = [shelf];
   }
 
+  // Não fazemos uma busca HTTP individual para cada livro durante a listagem.
+  // Isso atrasava a estante e descartava títulos quando a busca falhava.
+  // O ID pode ser resolvido sob demanda quando o usuário abre uma novelinha.
+  const unique = new Map();
+  for (const shelf of selectedShelves) {
+    for (const raw of shelf.books) {
+      const bookTitle = String(raw && raw.book_title || '').trim();
+      const filteredTitle = normalizeReelShortSlug(raw && (raw.filtered_title || bookTitle));
+      if (!bookTitle || !filteredTitle) continue;
+      const bookId = String(raw._id || raw.book_id || '');
+      const current = unique.get(filteredTitle);
+      const book = {
+        book_id: bookId || (current && current.book_id) || '',
+        book_title: bookTitle,
+        filtered_title: filteredTitle,
+        book_pic: String(raw.book_pic || ''),
+        special_desc: String(raw.special_desc || ''),
+        chapter_count: Number(raw.chapter_count || 0)
+      };
+      unique.set(filteredTitle, book);
+    }
+  }
+
+  const books = Array.from(unique.values());
   const value = {
-    bookshelf_name: String(shelf && shelf.bookshelf_name || type),
+    bookshelf_name: type === 'recommended'
+      ? 'Todas as estantes públicas do ReelShort'
+      : String(selectedShelves[0].bookshelf_name || type),
     books
   };
   reelShortShelfCache.set(type, { value, expiresAt: Date.now() + 3 * 60 * 1000 });
