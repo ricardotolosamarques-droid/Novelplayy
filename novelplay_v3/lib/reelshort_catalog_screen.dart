@@ -41,7 +41,8 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
   Future<List<Map<String, dynamic>>> _load() async {
     // A tela pública usa o catálogo automático do ReelShort, não o /catalog
     // administrativo que contém somente séries cadastradas manualmente.
-    final data = await _api('/reelshort/recommended');
+    // A tela principal exibe exclusivamente a estante oficial de novelinhas dubladas.
+    final data = await _api('/reelshort/dramadub');
     final books = data['books'];
     if (books is! List) {
       throw Exception('A API ReelShort não retornou a lista de novelinhas.');
