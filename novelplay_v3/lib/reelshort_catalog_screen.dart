@@ -15,6 +15,8 @@ class ReelShortCatalogScreen extends StatefulWidget {
 }
 
 class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
   late Future<List<Map<String, dynamic>>> _request = _load();
 
   Future<Map<String, dynamic>> _api(String path, {String method = 'GET', Map<String, dynamic>? body, bool authenticated = false}) async {
@@ -38,12 +40,13 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
     return data;
   }
 
-  Future<List<Map<String, dynamic>>> _load() async {
-    // A tela pública usa o catálogo automático do ReelShort, não o /catalog
-    // administrativo que contém somente séries cadastradas manualmente.
-    // A tela principal exibe exclusivamente a estante oficial de novelinhas dubladas.
-    final data = await _api('/reelshort/dramadub');
-    final books = data['books'];
+  Future<List<Map<String, dynamic>>> _load({String query = ''}) async {
+    // Sem termo, mantém a estante de dublados. Com termo, consulta a busca pública.
+    final endpoint = query.trim().isEmpty
+        ? '/reelshort/dramadub'
+        : '/reelshort/search?keywords=${Uri.encodeQueryComponent(query.trim())}';
+    final data = await _api(endpoint);
+    final books = data[query.trim().isEmpty ? 'books' : 'results'];
     if (books is! List) {
       throw Exception('A API ReelShort não retornou a lista de novelinhas.');
     }
@@ -64,7 +67,20 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
         (item['sourceBookId'] as String).isNotEmpty &&
         (item['sourceFilteredTitle'] as String).isNotEmpty).toList();
   }
-  void _refresh() => setState(() => _request = _load());
+  void _refresh() => setState(() => _request = _load(query: _searchQuery));
+
+  void _search(String value) {
+    setState(() {
+      _searchQuery = value.trim();
+      _request = _load(query: _searchQuery);
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   Future<void> _importSeriesFromLink() async {
     final link = TextEditingController();
@@ -242,7 +258,33 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: const Color(0xff101018),
-    appBar: AppBar(title: const Text('ReelShort'), actions: [
+    appBar: AppBar(
+      title: const Text('Pesquisar novelinhas'),
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(64),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+          child: TextField(
+            controller: _searchController,
+            textInputAction: TextInputAction.search,
+            onSubmitted: _search,
+            decoration: InputDecoration(
+              hintText: 'Digite o nome da novelinha',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: IconButton(
+                tooltip: 'Pesquisar',
+                onPressed: () => _search(_searchController.text),
+                icon: const Icon(Icons.arrow_forward),
+              ),
+              filled: true,
+              fillColor: const Color(0xff1b1b27),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+          ),
+        ),
+      ),
+      actions: [
       if (widget.isAdmin) IconButton(tooltip: 'Importar pelo link do ReelShort', onPressed: _importSeriesFromLink, icon: const Icon(Icons.download_for_offline_outlined)),
       if (widget.isAdmin) IconButton(tooltip: 'Adicionar série manualmente', onPressed: _createSeries, icon: const Icon(Icons.add_circle_outline)),
       IconButton(tooltip: 'Atualizar', onPressed: _refresh, icon: const Icon(Icons.refresh)),
@@ -258,7 +300,9 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
           const SizedBox(height: 12),
           const Text('Nenhuma série cadastrada', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          Text(widget.isAdmin ? 'Use o botão de importação para buscar uma novelinha pelo link ou + para cadastrar manualmente.' : 'Novas séries cadastradas aparecerão aqui.')
+          Text(_searchQuery.isNotEmpty
+              ? 'Nenhuma novelinha encontrada para "$_searchQuery".'
+              : widget.isAdmin ? 'Use o botão de importação para buscar uma novelinha pelo link ou + para cadastrar manualmente.' : 'Novas séries cadastradas aparecerão aqui.')
         ])));
         return RefreshIndicator(
           onRefresh: () async { _refresh(); await _request; },
@@ -570,10 +614,10 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
               leading: CircleAvatar(backgroundColor: const Color(0xff38202a), child: Text('$number')),
               title: Text((episode['title'] ?? 'Episódio $number').toString()),
               subtitle: Text(episode['sourceIsFree'] == true
-                  ? 'Episódio gratuito · download em preparação'
+                  ? 'Gratuito · disponível para assistir'
                   : episode['sourceIsFree'] == false
-                      ? 'Episódio pago · download indisponível'
-                      : 'Disponibilidade não informada · download indisponível'),
+                      ? 'Pago · acesso deve ser liberado pela plataforma'
+                      : 'Disponibilidade não informada'),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                 if (widget.isAdmin)
                   IconButton(
@@ -583,14 +627,16 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
                   ),
                 Icon(
                   episode['sourceIsFree'] == true
-                      ? Icons.download_outlined
+                      ? Icons.play_circle_outline
                       : Icons.lock_outline,
                   color: episode['sourceIsFree'] == true
                       ? const Color(0xffff6b9d)
                       : Colors.white38,
                 ),
               ]),
-              onTap: null,
+              onTap: episode['sourceIsFree'] == true
+                  ? () => _playSourceEpisode(episode)
+                  : () => _show('Este episódio está marcado como pago pela plataforma. O NovelPlay não desbloqueia conteúdo bloqueado.'),
             );
           },
         ),
