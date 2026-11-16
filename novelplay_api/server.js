@@ -393,15 +393,15 @@ async function getReelShortBookshelf(type) {
     }
   } else {
     const aliases = shelfAliases[type] || [];
-    const shelf = shelves.find(item => {
-      const name = normalizeShelfName(item && item.bookshelf_name);
+    selectedShelves = shelves.filter(item => {
+      if (!item || !Array.isArray(item.books)) return false;
+      const name = normalizeShelfName(item.bookshelf_name);
       return aliases.some(alias => name.includes(normalizeShelfName(alias)));
     });
-    if (!shelf) {
+    if (!selectedShelves.length) {
       const available = shelves.map(item => String(item && item.bookshelf_name || '')).filter(Boolean);
       throw new Error('Categoria ReelShort não encontrada: ' + type + '. Categorias recebidas: ' + available.join(' | '));
     }
-    selectedShelves = [shelf];
   }
 
   // Não fazemos uma busca HTTP individual para cada livro durante a listagem.
@@ -431,7 +431,7 @@ async function getReelShortBookshelf(type) {
   const value = {
     bookshelf_name: type === 'recommended'
       ? 'Todas as estantes públicas do ReelShort'
-      : String(selectedShelves[0].bookshelf_name || type),
+      : selectedShelves.map(item => String(item.bookshelf_name || type)).join(' + '),
     books
   };
   reelShortShelfCache.set(type, { value, expiresAt: Date.now() + 3 * 60 * 1000 });
