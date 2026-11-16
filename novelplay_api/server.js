@@ -380,7 +380,7 @@ async function getReelShortBookshelf(type) {
 
   const shelfAliases = {
     newrelease: ['lancamento', 'newrelease', 'rilisbaru'],
-    dramadub: ['dublado', 'dublada', 'dramacomdub', 'dubbed', 'dramadengandub']
+    dramadub: ['dramacomdublagem', 'dramadublagem', 'dublagem', 'dublado', 'dublada', 'dramacomdub', 'dubbed', 'dramadengandub']
   };
 
   // A tela principal reúne os títulos de todas as estantes públicas recebidas.
