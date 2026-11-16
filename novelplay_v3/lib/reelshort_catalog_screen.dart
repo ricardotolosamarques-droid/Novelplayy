@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:video_player/video_player.dart';
 import 'catalog.dart';
 
 const _catalogApi = 'https://novelplayy-a2dd0.containers.snapdeploy.app';
