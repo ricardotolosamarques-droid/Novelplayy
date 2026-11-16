@@ -195,7 +195,7 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
       }
       _refresh();
       final videoCount = result is Map ? (result['videoCount'] as num?)?.toInt() ?? 0 : 0;
-      _message('Importação concluída: ${episodeCount} episódios. $videoCount vídeos conectados automaticamente; ${episodes.length - videoCount} sem link disponível.');
+      _message('Importação concluída: ${episodes.length} episódios. $videoCount vídeos conectados automaticamente; ${episodes.length - videoCount} sem link disponível.');
     } catch (e) {
       _message(e.toString().replaceFirst('Exception: ', ''));
     } finally {
@@ -277,7 +277,7 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
                       ? Image.network(coverUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.movie))
                       : const Icon(Icons.movie, size: 38, color: Color(0xffff6b9d))),
                   title: Text((item['title'] ?? 'Série').toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('${episodes.length} episódios\n${(item['synopsis'] ?? '').toString()}', maxLines: 3, overflow: TextOverflow.ellipsis),
+                  subtitle: Text('${episodeCount} episódios\n${(item['synopsis'] ?? '').toString()}', maxLines: 3, overflow: TextOverflow.ellipsis),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => _ReelShortSeriesScreen(series: item, isAdmin: widget.isAdmin, onChanged: _refresh))),
                 ),
