@@ -58,6 +58,7 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
         'sourceFilteredTitle': (book['filtered_title'] ?? '').toString(),
         'sourceCatalog': 'reelshort',
         'episodes': <Map<String, dynamic>>[],
+        'episodeCount': int.tryParse((book['chapter_count'] ?? 0).toString()) ?? 0,
       };
     }).where((item) =>
         (item['sourceBookId'] as String).isNotEmpty &&
@@ -194,7 +195,7 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
       }
       _refresh();
       final videoCount = result is Map ? (result['videoCount'] as num?)?.toInt() ?? 0 : 0;
-      _message('Importação concluída: ${episodes.length} episódios. $videoCount vídeos conectados automaticamente; ${episodes.length - videoCount} sem link disponível.');
+      _message('Importação concluída: ${episodeCount} episódios. $videoCount vídeos conectados automaticamente; ${episodes.length - videoCount} sem link disponível.');
     } catch (e) {
       _message(e.toString().replaceFirst('Exception: ', ''));
     } finally {
@@ -265,7 +266,7 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
             padding: const EdgeInsets.all(14), itemCount: series.length,
             itemBuilder: (context, index) {
               final item = series[index];
-              final episodes = item['episodes'] as List? ?? [];
+              final episodeCount = (item['episodeCount'] as num?)?.toInt() ?? (item['episodes'] as List? ?? []).length;
               final coverUrl = (item['coverUrl'] ?? '').toString();
               return Card(
                 color: const Color(0xff1b1b27), clipBehavior: Clip.antiAlias,
