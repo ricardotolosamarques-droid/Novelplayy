@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:video_player/video_player.dart';
 import 'catalog.dart';
 
 const _catalogApi = 'https://novelplayy-a2dd0.containers.snapdeploy.app';
@@ -569,13 +568,11 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
             return ListTile(
               leading: CircleAvatar(backgroundColor: const Color(0xff38202a), child: Text('$number')),
               title: Text((episode['title'] ?? 'Episódio $number').toString()),
-              subtitle: Text((episode['videoUrl'] ?? '').toString().isNotEmpty
-                  ? 'Assistir no NovelPlay'
-                  : episode['sourceIsFree'] == true
-                      ? 'Episódio gratuito · assistir'
-                      : episode['sourceIsFree'] == false
-                          ? 'Episódio pago · consultar disponibilidade'
-                          : 'Disponibilidade não informada'),
+              subtitle: Text(episode['sourceIsFree'] == true
+                  ? 'Episódio gratuito · download em preparação'
+                  : episode['sourceIsFree'] == false
+                      ? 'Episódio pago · download indisponível'
+                      : 'Disponibilidade não informada · download indisponível'),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                 if (widget.isAdmin)
                   IconButton(
@@ -583,16 +580,16 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
                     icon: const Icon(Icons.link, color: Color(0xffff6b9d)),
                     onPressed: () => _addEpisode(existing: episode),
                   ),
-                Icon((episode['videoUrl'] ?? '').toString().isNotEmpty || widget.series['sourceCatalog'] == 'reelshort' ? Icons.play_circle_outline : Icons.lock_outline, color: const Color(0xffff6b9d)),
+                Icon(
+                  episode['sourceIsFree'] == true
+                      ? Icons.download_outlined
+                      : Icons.lock_outline,
+                  color: episode['sourceIsFree'] == true
+                      ? const Color(0xffff6b9d)
+                      : Colors.white38,
+                ),
               ]),
-              onTap: (episode['videoUrl'] ?? '').toString().isNotEmpty
-                  ? () => Navigator.push(context, MaterialPageRoute(builder: (_) => _AuthorizedHlsPlayer(
-                      title: (episode['title'] ?? 'Episódio $number').toString(),
-                      url: (episode['videoUrl'] ?? '').toString(),
-                    )))
-                  : widget.series['sourceCatalog'] == 'reelshort'
-                      ? () => _playSourceEpisode(episode)
-                      : null,
+              onTap: null,
             );
           },
         ),
@@ -600,6 +597,7 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
   }
 }
 
+// Player temporarily retained for later reactivation; episode taps are disabled.
 class _AuthorizedHlsPlayer extends StatefulWidget {
   final String title, url;
   const _AuthorizedHlsPlayer({required this.title, required this.url});
