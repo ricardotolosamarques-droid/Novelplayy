@@ -400,11 +400,26 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
   }
 
   Future<void> _playSourceEpisode(Map<String, dynamic> episode) async {
-    final bookId = (widget.series['sourceBookId'] ?? '').toString();
-    final slug = (widget.series['sourceFilteredTitle'] ?? '').toString();
     final number = (episode['number'] ?? '').toString();
-    final chapterId = (episode['sourceEpisodeId'] ?? '').toString();
     try {
+      // Links inseridos pelo administrador são tratados como fontes autorizadas,
+      // inclusive quando o episódio de origem está marcado como pago.
+      final savedVideo = Sources.valid((episode['videoUrl'] ?? '').toString());
+      if (savedVideo != null) {
+        if (!mounted) return;
+        await Navigator.push(context, MaterialPageRoute(builder: (_) => _AuthorizedHlsPlayer(
+          title: (episode['title'] ?? 'Episódio $number').toString(),
+          url: savedVideo.toString(),
+        )));
+        return;
+      }
+      if (episode['sourceIsFree'] != true) {
+        _show('Este episódio está bloqueado no ReelShort. Adicione um link de vídeo que você tenha autorização para usar.');
+        return;
+      }
+      final bookId = (widget.series['sourceBookId'] ?? '').toString();
+      final slug = (widget.series['sourceFilteredTitle'] ?? '').toString();
+      final chapterId = (episode['sourceEpisodeId'] ?? '').toString();
       final uri = Uri.parse('$_catalogApi/reelshort/video/${Uri.encodeComponent(bookId)}/$number')
           .replace(queryParameters: {'filtered_title': slug, 'chapter_id': chapterId});
       final data = await Sources.request(uri);
@@ -613,11 +628,14 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
             return ListTile(
               leading: CircleAvatar(backgroundColor: const Color(0xff38202a), child: Text('$number')),
               title: Text((episode['title'] ?? 'Episódio $number').toString()),
-              subtitle: Text(episode['sourceIsFree'] == true
-                  ? 'Gratuito · disponível para assistir'
-                  : episode['sourceIsFree'] == false
-                      ? 'Pago · acesso deve ser liberado pela plataforma'
-                      : 'Disponibilidade não informada'),
+              subtitle: Text(
+                Sources.valid((episode['videoUrl'] ?? '').toString()) != null
+                    ? 'Link de vídeo autorizado adicionado'
+                    : episode['sourceIsFree'] == true
+                        ? 'Gratuito · disponível para assistir'
+                        : episode['sourceIsFree'] == false
+                            ? 'Pago · bloqueado até haver acesso autorizado'
+                            : 'Disponibilidade não informada'),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                 if (widget.isAdmin)
                   IconButton(
@@ -626,17 +644,17 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
                     onPressed: () => _addEpisode(existing: episode),
                   ),
                 Icon(
-                  episode['sourceIsFree'] == true
+                  episode['sourceIsFree'] == true ||
+                          Sources.valid((episode['videoUrl'] ?? '').toString()) != null
                       ? Icons.play_circle_outline
                       : Icons.lock_outline,
-                  color: episode['sourceIsFree'] == true
+                  color: episode['sourceIsFree'] == true ||
+                          Sources.valid((episode['videoUrl'] ?? '').toString()) != null
                       ? const Color(0xffff6b9d)
                       : Colors.white38,
                 ),
               ]),
-              onTap: episode['sourceIsFree'] == true
-                  ? () => _playSourceEpisode(episode)
-                  : () => _show('Este episódio está marcado como pago pela plataforma. O NovelPlay não desbloqueia conteúdo bloqueado.'),
+              onTap: () => _playSourceEpisode(episode),
             );
           },
         ),
