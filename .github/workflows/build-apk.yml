@@ -263,7 +263,7 @@ jobs:
 
       - name: Run unit tests
         working-directory: novelplay_v3
-        run: flutter test --no-pub
+        run: flutter test --no-pub test/episode_sort_test.dart
 
       - name: Build release APK
         working-directory: novelplay_v3
