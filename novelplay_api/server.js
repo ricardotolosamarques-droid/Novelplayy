@@ -561,15 +561,10 @@ app.get('/reelshort/episodes/:bookId', reelShortLimiter, async (req, res) => {
     const found = await getReelShortBookDetails(slug);
     const details = found.details;
     const sourceEpisodes = found.episodes;
-    const paidStart = Number(details.paid_start);
-    const isPaid = Number(details.is_paid);
     const episodes = sourceEpisodes.map(item => {
       const number = Number(item.serial_number || item.episode || item.episode_number || 0);
       const chapterId = String(item.chapter_id || item.chapterId || item._id || '');
-      const free = isPaid === 0 && Number.isSafeInteger(paidStart) && paidStart === 0
-        ? true
-        : Number.isSafeInteger(paidStart) && paidStart > 0 && number < paidStart;
-      return { episode: number, chapter_id: chapterId, free };
+      return { episode: number, chapter_id: chapterId };
     }).filter(item => Number.isSafeInteger(item.episode) && item.episode > 0 && item.chapter_id);
     if (!episodes.length) {
       throw new Error('A página foi encontrada, mas não trouxe números e identificadores de episódios reconhecíveis.');
