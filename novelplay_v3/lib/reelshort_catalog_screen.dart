@@ -181,7 +181,6 @@ class _ReelShortCatalogScreenState extends State<ReelShortCatalogScreen> {
           'number': number,
           'title': 'Episódio $number',
           'sourceEpisodeId': (item['chapter_id'] ?? '').toString(),
-          'isFree': item['free'] == true ? true : (item['free'] == false ? false : null),
         });
       }
       if (episodes.isEmpty) throw Exception('Nenhum episódio foi encontrado para essa novelinha.');
@@ -376,7 +375,6 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
           'number': number,
           'title': 'Episódio $number',
           'sourceEpisodeId': chapterId,
-          'sourceIsFree': raw['free'],
           'videoUrl': '',
         });
       }
@@ -414,7 +412,7 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
         return;
       }
       if (episode['sourceIsFree'] != true) {
-        _show('Este episódio está bloqueado no ReelShort. Adicione um link de vídeo que você tenha autorização para usar.');
+        _show('Este episódio não tem um vídeo público disponível. Adicione um link de vídeo autorizado para reproduzi-lo.');
         return;
       }
       final bookId = (widget.series['sourceBookId'] ?? '').toString();
@@ -631,11 +629,7 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
               subtitle: Text(
                 Sources.valid((episode['videoUrl'] ?? '').toString()) != null
                     ? 'Link de vídeo autorizado adicionado'
-                    : episode['sourceIsFree'] == true
-                        ? 'Gratuito · disponível para assistir'
-                        : episode['sourceIsFree'] == false
-                            ? 'Pago · bloqueado até haver acesso autorizado'
-                            : 'Disponibilidade não informada'),
+                    : 'Vídeo não disponível; adicione um link autorizado'),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                 if (widget.isAdmin)
                   IconButton(
@@ -644,12 +638,10 @@ class _ReelShortSeriesScreenState extends State<_ReelShortSeriesScreen> {
                     onPressed: () => _addEpisode(existing: episode),
                   ),
                 Icon(
-                  episode['sourceIsFree'] == true ||
-                          Sources.valid((episode['videoUrl'] ?? '').toString()) != null
+                  Sources.valid((episode['videoUrl'] ?? '').toString()) != null
                       ? Icons.play_circle_outline
-                      : Icons.lock_outline,
-                  color: episode['sourceIsFree'] == true ||
-                          Sources.valid((episode['videoUrl'] ?? '').toString()) != null
+                      : Icons.link_off,
+                  color: Sources.valid((episode['videoUrl'] ?? '').toString()) != null
                       ? const Color(0xffff6b9d)
                       : Colors.white38,
                 ),
