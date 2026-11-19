@@ -243,16 +243,13 @@ jobs:
         working-directory: novelplay_v3
         run: flutter analyze lib --no-pub --no-fatal-warnings --no-fatal-infos
 
+      - name: Run unit tests
+        working-directory: novelplay_v3
+        run: flutter test --no-pub
+
       - name: Build release APK
         working-directory: novelplay_v3
-        env:
-          DRIVE_API_KEY: ${{ secrets.DRIVE_API_KEY }}
-        run: |
-          if [ -z "$DRIVE_API_KEY" ]; then
-            echo "::error::O secret DRIVE_API_KEY não está configurado em Settings > Secrets and variables > Actions."
-            exit 1
-          fi
-          flutter build apk --release --dart-define=DRIVE_API_KEY="$DRIVE_API_KEY"
+        run: flutter build apk --release
 
       - name: Build diagnostic app with NovelPlay dependencies
         run: |
@@ -295,13 +292,14 @@ jobs:
       - name: Build isolated plugin diagnostic APKs
         run: |
           mkdir -p plugin_isolation
-          for plugin in video_player shared_preferences wakelock_plus url_launcher; do
+          for plugin in video_player shared_preferences wakelock_plus url_launcher google_sign_in; do
             project="plugin_isolation/${plugin}_test"
             case "$plugin" in
               video_player) version='^2.9.2' ;;
               shared_preferences) version='^2.3.2' ;;
               wakelock_plus) version='^1.3.3' ;;
               url_launcher) version='^6.3.1' ;;
+              google_sign_in) version='^6.2.2' ;;
             esac
             flutter create --platforms=android --org com.example --project-name "${plugin}_test" "$project"
             cat > "$project/pubspec.yaml" <<EOF
