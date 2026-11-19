@@ -972,11 +972,12 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                         child: InkWell(
                           borderRadius: BorderRadius.circular(17),
                           onTap: () async {
+                            final accessToken = await _requireAccessToken();
                             await Navigator.push(context, MaterialPageRoute(builder: (_) => _DrivePlayerPage(
                               episodes: episodes, initialIndex: i,
                               seriesId: _selectedFolderId!,
                               seriesName: _selectedSeriesName ?? 'Novelinha',
-                              accessToken: await _requireAccessToken(),
+                              accessToken: accessToken,
                             )));
                             if (mounted) setState(() => _historyFuture = _loadHistory());
                           },
