@@ -89,28 +89,33 @@ Não foi possível verificar a reprodução real na infraestrutura
 do GitHub/Render porque as consultas foram bloqueadas pelo provedor.
 
 
-## Integração com a pasta Google Drive
+## Integração Google Drive API v3 — OAuth somente leitura
 
-A aba **Meu Drive** consulta a pasta pública configurada no app e ordena os vídeos pelo número no nome. A pasta precisa continuar compartilhada como **Qualquer pessoa com o link — Leitor**.
+A aba **Meu Drive** autentica diretamente no Google usando Google Sign-In e consulta a API oficial Drive v3. O aplicativo solicita exclusivamente o escopo:
 
-Pasta configurada: `1O28a3-3bmKkVj_3dS9HlWX0Owyn3eFts`.
+`https://www.googleapis.com/auth/drive.readonly`
 
-### Configurar a chave sem publicá-la
+A tela lista as pastas e arquivos, lê capas e reproduz os vídeos com token OAuth no cabeçalho HTTP. A chave `DRIVE_API_KEY` não é mais necessária para esse fluxo. A pasta principal configurada no app é `1O28a3-3bmKkVj_3dS9HlWX0Owyn3eFts`; a conta Google conectada precisa ter permissão de leitura sobre ela. A pasta não precisa ser pública.
 
-1. No GitHub, abra **Settings → Secrets and variables → Actions → New repository secret**.
-2. Nome do secret: `DRIVE_API_KEY`.
-3. Cole o valor da chave da Google Drive API e salve. Não coloque a chave em arquivos do projeto nem em mensagens públicas.
-4. Abra **Actions**, execute novamente o workflow **Preparar Android e obter SHA-1 do Novelinha** e aguarde a compilação.
-5. Baixe o artefato `novelinha-debug-apk` quando a execução terminar com sucesso.
+### Configuração no Google Cloud
 
-O workflow injeta a chave no build usando `--dart-define`; a chave não é gravada no código-fonte. Como toda chave incluída em um APK pode ser extraída do aplicativo, restrinja-a no Google Cloud Console à Drive API e acompanhe as cotas.
+1. Ative **Google Drive API** no projeto Google Cloud.
+2. Configure a tela de consentimento OAuth. Se o aplicativo estiver em modo de teste, adicione a conta Google que será usada no telefone à lista de usuários de teste.
+3. Crie uma credencial OAuth do tipo **Android**, com o pacote `com.example.novelinha_app` e o SHA-1 da assinatura do APK que será instalado.
+4. Instale o APK produzido pela mesma execução cujo SHA-1 foi usado. O workflow mostra esse fingerprint no log.
+5. Na aba **Meu Drive**, toque em **Conectar com Google** e escolha a conta que consegue abrir a pasta principal.
 
-**Limitação que precisa ser testada:** a listagem de arquivos públicos usa a API oficial do Drive. A reprodução também tenta obter o conteúdo pela API, mas o Google pode exigir autorização adicional ou limitar downloads/requisições. O Drive não é uma CDN de streaming; não há garantia de reprodução contínua nem de tráfego ilimitado. Se o vídeo não tocar, a tela mostrará o erro retornado pelo Google.
+**Importante:** os workflows atuais assinam builds de teste com uma chave de depuração gerada no CI; por isso, o SHA-1 pode mudar entre execuções. Para uma instalação atualizada sem refazer o cadastro OAuth, será necessário configurar uma chave de assinatura persistente e guardá-la em secrets do GitHub. Não envie chaves privadas, tokens ou senhas pelo chat.
 
+O escopo `drive.readonly` permite listar, baixar e reproduzir arquivos, mas não permite criar, editar, enviar ou excluir arquivos. O fluxo administrativo de upload que já existe no backend é separado e continua exigindo uma credencial de servidor com permissão de escrita; ele não é usado pela tela de leitura do Drive.
+
+### Histórico e ordenação
+
+O histórico de reprodução permanece local no aparelho. A lista de episódios agora interpreta nomes como `S01E03`, `2x11`, `EP. 09`, `Episódio 10` e `12 - título`, ordenando pelo número do episódio. Os casos reconhecidos têm testes automatizados em `test/episode_sort_test.dart`.
 
 ## Estado da autenticação Google Drive — 05/11/2026
 
-A aba **Meu Drive** ainda lista e reproduz os vídeos da pasta pública usando a chave `DRIVE_API_KEY`. Separadamente, o painel administrativo já possui conexão OAuth Google no backend para enviar vídeos, recuperar arquivos antigos e verificar áudio/vídeo no Drive. O cliente OAuth é do tipo **Aplicativo da Web** e usa a URI de retorno `https://novelplay-api-ee5f.onrender.com/google-drive/callback`.
+A aba **Meu Drive** usa agora OAuth Google direto no aplicativo, com escopo somente leitura. Separadamente, o painel administrativo mantém a conexão OAuth de servidor para enviar vídeos, recuperar arquivos antigos e verificar áudio/vídeo no Drive. O cliente OAuth é do tipo **Aplicativo da Web** e usa a URI de retorno `https://novelplay-api-ee5f.onrender.com/google-drive/callback`.
 
 A conexão OAuth de upload solicita atualmente o escopo `https://www.googleapis.com/auth/drive` (leitura e escrita), pois o servidor cria pastas, envia vídeos e atualiza arquivos existentes. Isso **não é um escopo somente leitura**. Um token `drive.readonly` não pode executar os uploads solicitados; para voltar a somente leitura seria necessário remover as funções de escrita ou redesenhar o fluxo com outro consentimento/permissão.
 
