@@ -7,17 +7,34 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'episode_sort.dart';
 import 'reelshort_catalog_screen.dart';
 import 'published_catalog_screen.dart';
 
 const _folderId = '1O28a3-3bmKkVj_3dS9HlWX0Owyn3eFts';
-const _apiKey = String.fromEnvironment('DRIVE_API_KEY');
+const _driveReadOnlyScope = 'https://www.googleapis.com/auth/drive.readonly';
 
 class DriveSeries {
-  const DriveSeries(this.id, this.name, {this.coverId});
+  const DriveSeries(
+    this.id,
+    this.name, {
+    this.coverId,
+    this.coverResourceKey,
+  });
+
   final String id;
   final String name;
   final String? coverId;
+  final String? coverResourceKey;
+
+  Map<String, String> coverHeaders(String accessToken) => {
+        'Authorization': 'Bearer $accessToken',
+        if (coverId != null &&
+            coverResourceKey != null &&
+            coverResourceKey!.isNotEmpty)
+          'X-Goog-Drive-Resource-Keys': '$coverId/$coverResourceKey',
+      };
 }
 
 class WatchHistoryEntry {
@@ -56,17 +73,14 @@ class DriveEpisode {
       ? const <String, String>{}
       : <String, String>{'X-Goog-Drive-Resource-Keys': '$id/$resourceKey'};
 
-  int get number {
-    final match = RegExp(r'\d+').firstMatch(name);
-    return match == null ? 0 : int.tryParse(match.group(0)!) ?? 0;
-  }
+  int get number => episodeNumberFromName(name);
 
-  // Primeiro tenta o endpoint oficial da API; depois o link direto de
-  // download do Drive, útil para arquivos compartilhados publicamente.
+  // A API oficial do Drive entrega o conteúdo autenticado pelo cabeçalho
+  // Authorization. Nenhuma chave de API é embutida no APK.
   Uri get mediaUri => Uri.https(
         'www.googleapis.com',
         '/drive/v3/files/$id',
-        {'alt': 'media', 'key': _apiKey},
+        {'alt': 'media'},
       );
 
   Uri get directDownloadUri => Uri.https(
@@ -97,7 +111,14 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
   int _tabIndex = 0;
   int _bottomIndex = 0;
   bool _openingSeries = false;
-  late Future<List<dynamic>> _content = _loadSeries();
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: <String>[_driveReadOnlyScope],
+  );
+  GoogleSignInAccount? _googleAccount;
+  String? _accessToken;
+  String? _driveAuthMessage;
+  bool _isConnectingGoogle = false;
+  late Future<List<dynamic>> _content = _restoreGoogleDriveSession();
   late Future<List<Map<String, dynamic>>> _publishedCatalogFuture = _loadPublishedCatalog();
   late Future<List<WatchHistoryEntry>> _historyFuture = _loadHistory();
 
@@ -105,6 +126,145 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
   void initState() {
     super.initState();
   }
+
+  Future<List<dynamic>> _restoreGoogleDriveSession() async {
+    GoogleSignInAccount? account;
+    try {
+      account = await _googleSignIn.signInSilently();
+    } catch (error) {
+      _driveAuthMessage = 'Não foi possível restaurar a sessão Google: $error';
+      return <DriveSeries>[];
+    }
+    if (account == null) return <DriveSeries>[];
+
+    try {
+      final authentication = await account.authentication;
+      final token = authentication.accessToken;
+      if (token == null || token.isEmpty) {
+        _driveAuthMessage = 'A autorização do Google expirou. Conecte a conta novamente.';
+        return <DriveSeries>[];
+      }
+      _googleAccount = account;
+      _accessToken = token;
+      _driveAuthMessage = null;
+    } catch (error) {
+      _driveAuthMessage = 'Não foi possível obter autorização do Google: $error';
+      return <DriveSeries>[];
+    }
+    return _loadSeries();
+  }
+
+  Future<String> _requireAccessToken() async {
+    var account = _googleAccount;
+    account ??= await _googleSignIn.signInSilently();
+    if (account == null) {
+      throw Exception('Conecte sua conta Google para acessar o Google Drive.');
+    }
+    final authentication = await account.authentication;
+    final token = authentication.accessToken;
+    if (token == null || token.isEmpty) {
+      throw Exception('A sessão do Google expirou. Desconecte e conecte a conta novamente.');
+    }
+    _googleAccount = account;
+    _accessToken = token;
+    return token;
+  }
+
+  Future<void> _connectGoogleDrive() async {
+    if (_isConnectingGoogle) return;
+    setState(() => _isConnectingGoogle = true);
+    try {
+      final account = await _googleSignIn.signIn();
+      if (account == null) return;
+      final authentication = await account.authentication;
+      final token = authentication.accessToken;
+      if (token == null || token.isEmpty) {
+        throw Exception('O Google não forneceu um token de acesso ao Drive.');
+      }
+      if (!mounted) return;
+      setState(() {
+        _googleAccount = account;
+        _accessToken = token;
+        _driveAuthMessage = null;
+        _selectedFolderId = null;
+        _selectedSeriesName = null;
+        _content = _loadSeries();
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _driveAuthMessage = error.toString());
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Falha ao conectar Google Drive: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isConnectingGoogle = false);
+    }
+  }
+
+  Future<void> _disconnectGoogleDrive() async {
+    await _googleSignIn.signOut();
+    if (!mounted) return;
+    setState(() {
+      _googleAccount = null;
+      _accessToken = null;
+      _driveAuthMessage = null;
+      _selectedFolderId = null;
+      _selectedSeriesName = null;
+      _content = Future<List<dynamic>>.value(<DriveSeries>[]);
+    });
+  }
+
+  Widget _googleDriveConnectPage() => Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_outlined, size: 64, color: Color(0xffff6b9d)),
+              const SizedBox(height: 18),
+              const Text(
+                'Conecte seu Google Drive',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Entre com a conta Google que tem acesso à pasta de novelinhas. '
+                'O NovelPlay só poderá listar e reproduzir arquivos; não poderá criar, alterar ou excluir itens.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70, height: 1.45),
+              ),
+              if (_driveAuthMessage != null) ...[
+                const SizedBox(height: 14),
+                Text(
+                  _driveAuthMessage!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.amber),
+                ),
+              ],
+              const SizedBox(height: 22),
+              FilledButton.icon(
+                onPressed: _isConnectingGoogle ? null : _connectGoogleDrive,
+                icon: _isConnectingGoogle
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.login),
+                label: Text(_isConnectingGoogle ? 'Conectando...' : 'Conectar com Google'),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Permissão solicitada: Google Drive somente leitura (drive.readonly).',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      );
 
   @override
   void dispose() {
@@ -152,6 +312,19 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
         const SizedBox(height: 14),
         const Center(child: Text('MEU PERFIL', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900))),
         const SizedBox(height: 26),
+        if (_googleAccount != null) ...[
+          ListTile(
+            leading: const Icon(Icons.account_circle_outlined),
+            title: Text(_googleAccount!.email),
+            subtitle: const Text('Google Drive • somente leitura'),
+          ),
+          OutlinedButton.icon(
+            onPressed: _disconnectGoogleDrive,
+            icon: const Icon(Icons.logout),
+            label: const Text('Desconectar Google Drive'),
+          ),
+          const SizedBox(height: 16),
+        ],
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -180,11 +353,12 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
     try {
       final episodes = await _loadEpisodes(entry.seriesId);
       if (!mounted || episodes.isEmpty) return;
+      final accessToken = await _requireAccessToken();
       final found = episodes.indexWhere((episode) => episode.id == entry.episodeId);
       final index = found < 0 ? 0 : found;
       await Navigator.push(context, MaterialPageRoute(builder: (_) => _DrivePlayerPage(
         episodes: episodes, initialIndex: index, seriesId: entry.seriesId,
-        seriesName: entry.seriesName,
+        seriesName: entry.seriesName, accessToken: accessToken,
         initialPosition: found < 0 ? Duration.zero : Duration(milliseconds: entry.positionMs),
       )));
       if (mounted) setState(() => _historyFuture = _loadHistory());
@@ -197,18 +371,27 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
 
   Future<List<Map<String, dynamic>>> _listChildren(String parentId) async {
     final allFiles = <Map<String, dynamic>>[];
+    final accessToken = await _requireAccessToken();
     String? pageToken;
     do {
       final params = <String, String>{
         'q': "'$parentId' in parents and trashed = false",
-        'key': _apiKey,
         'pageSize': '1000',
         'orderBy': 'name',
         'fields': 'files(id,name,mimeType,resourceKey),nextPageToken',
       };
       if (pageToken != null) params['pageToken'] = pageToken;
       final uri = Uri.https('www.googleapis.com', '/drive/v3/files', params);
-      final response = await http.get(uri).timeout(const Duration(seconds: 25));
+      final response = await http.get(
+        uri,
+        headers: {'Authorization': 'Bearer $accessToken'},
+      ).timeout(const Duration(seconds: 25));
+      if (response.statusCode == 401) {
+        throw Exception('A sessão do Google expirou. Desconecte e conecte a conta novamente.');
+      }
+      if (response.statusCode == 403) {
+        throw Exception('O Google Drive negou o acesso. Confira se esta conta pode abrir a pasta configurada.');
+      }
       if (response.statusCode != 200) {
         throw Exception('Google Drive HTTP ${response.statusCode}: ${response.body}');
       }
@@ -220,9 +403,6 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
   }
 
   Future<List<DriveSeries>> _loadSeries() async {
-    if (_apiKey.isEmpty) {
-      throw Exception('A chave DRIVE_API_KEY ainda não foi configurada na compilação. Veja as instruções no README.');
-    }
     final files = await _listChildren(_folderId);
     final folders = files
         .where((file) => file['mimeType'] == 'application/vnd.google-apps.folder')
@@ -244,7 +424,14 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
               break;
             }
           }
-          return cover == null ? series : DriveSeries(series.id, series.name, coverId: cover['id'] as String?);
+          return cover == null
+              ? series
+              : DriveSeries(
+                  series.id,
+                  series.name,
+                  coverId: cover['id'] as String?,
+                  coverResourceKey: cover['resourceKey'] as String?,
+                );
         } catch (_) {
           return series;
         }
@@ -317,7 +504,11 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
 
   Future<void> _refresh() async {
     setState(() {
-      _content = _selectedFolderId == null ? _loadSeries() : _loadEpisodes(_selectedFolderId!);
+      _content = _accessToken == null
+          ? _restoreGoogleDriveSession()
+          : _selectedFolderId == null
+              ? _loadSeries()
+              : _loadEpisodes(_selectedFolderId!);
       if (_selectedFolderId == null && _bottomIndex == 0) {
         _publishedCatalogFuture = _loadPublishedCatalog();
       }
@@ -413,8 +604,11 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
             }
             final items = snapshot.data ?? [];
             if (_selectedFolderId == null) {
-              final allSeries = items.cast<DriveSeries>();
               if (_bottomIndex == 4) return _profilePage();
+              if (_googleAccount == null || _accessToken == null) {
+                return _googleDriveConnectPage();
+              }
+              final allSeries = items.cast<DriveSeries>();
               final series = allSeries.where((item) {
                 final matchesSearch = item.name.toLowerCase().contains(_searchQuery.toLowerCase());
                 final matchesTab = _bottomIndex != 2 || _favoriteIds.contains(item.id);
@@ -488,7 +682,17 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                           decoration: BoxDecoration(color: const Color(0xff242424), borderRadius: BorderRadius.circular(5)),
                           child: Stack(fit: StackFit.expand, children: [
                             if (series.isNotEmpty && series.first.coverId != null)
-                              Image.network('https://drive.google.com/uc?export=view&id=${series.first.coverId}', fit: BoxFit.cover, errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xff421923)))
+                              Image.network(
+                                Uri.https(
+                                  'www.googleapis.com',
+                                  '/drive/v3/files/${series.first.coverId}',
+                                  {'alt': 'media'},
+                                ).toString(),
+                                headers: series.first.coverHeaders(_accessToken!),
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    const ColoredBox(color: Color(0xff421923)),
+                              )
                             else
                               const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(colors: [Color(0xff751b2a), Color(0xff151515)], begin: Alignment.topLeft, end: Alignment.bottomRight)), child: Icon(Icons.movie_creation_outlined, size: 130, color: Color(0x44ffffff))),
                             const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0x00000000), Color(0x33000000), Color(0xf0000000)], stops: [0.30, 0.57, 1]))),
@@ -770,7 +974,9 @@ class _DriveNovelScreenState extends State<DriveNovelScreen> {
                           onTap: () async {
                             await Navigator.push(context, MaterialPageRoute(builder: (_) => _DrivePlayerPage(
                               episodes: episodes, initialIndex: i,
-                              seriesId: _selectedFolderId!, seriesName: _selectedSeriesName ?? 'Novelinha',
+                              seriesId: _selectedFolderId!,
+                              seriesName: _selectedSeriesName ?? 'Novelinha',
+                              accessToken: await _requireAccessToken(),
                             )));
                             if (mounted) setState(() => _historyFuture = _loadHistory());
                           },
@@ -846,11 +1052,14 @@ class _DriveMessage extends StatelessWidget {
 class _DrivePlayerPage extends StatefulWidget {
   const _DrivePlayerPage({
     required this.episodes, required this.initialIndex, required this.seriesId,
-    required this.seriesName, this.initialPosition = Duration.zero,
+    required this.seriesName,
+    required this.accessToken,
+    this.initialPosition = Duration.zero,
   });
   final List<DriveEpisode> episodes;
   final int initialIndex;
   final String seriesId, seriesName;
+  final String accessToken;
   final Duration initialPosition;
 
   @override
@@ -884,15 +1093,19 @@ class _DrivePlayerPageState extends State<_DrivePlayerPage> {
   Future<VideoPlayerController> _createInitializedPlayer(DriveEpisode episode) async {
     VideoPlayerController? player;
     Object? apiError;
+    final headers = <String, String>{
+      'Authorization': 'Bearer ${widget.accessToken}',
+      ...episode.resourceHeaders,
+    };
     try {
-      player = VideoPlayerController.networkUrl(episode.mediaUri, httpHeaders: episode.resourceHeaders);
+      player = VideoPlayerController.networkUrl(episode.mediaUri, httpHeaders: headers);
       await player.initialize();
       await player.setVolume(1.0);
       return player;
     } catch (error) {
       apiError = error;
       await player?.dispose();
-      player = VideoPlayerController.networkUrl(episode.directDownloadUri, httpHeaders: episode.resourceHeaders);
+      player = VideoPlayerController.networkUrl(episode.directDownloadUri, httpHeaders: headers);
       try {
         await player.initialize();
         await player.setVolume(1.0);
