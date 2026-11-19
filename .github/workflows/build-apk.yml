@@ -36,6 +36,24 @@ jobs:
         working-directory: novelplay_v3
         run: flutter create --platforms=android --org com.example --project-name novelinha_app .
 
+      - name: Create debug signing key and show OAuth SHA-1
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -noprompt -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | grep -E 'SHA1:|SHA256:'
+          echo "::warning title=Assinatura temporária::Cadastre o SHA-1 deste log no cliente OAuth Android e instale o APK desta mesma execução. O fingerprint muda em uma nova execução."
       - name: Add native crash report capture
         working-directory: novelplay_v3
         run: |
