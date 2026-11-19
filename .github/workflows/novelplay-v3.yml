@@ -177,7 +177,7 @@ jobs:
             keytool -genkeypair -noprompt -v \
               -keystore "$ANDROID_USER_HOME/debug.keystore" \
               -storepass android \
-              -alias AndroidDebugKey \
+              -alias androiddebugkey \
               -keypass android \
               -keyalg RSA \
               -keysize 2048 \
@@ -185,7 +185,7 @@ jobs:
               -dname "CN=Android Debug,O=Android,C=US"
           fi
           cp "$ANDROID_USER_HOME/debug.keystore" "$HOME/.android/debug.keystore"
-          keytool -list -v -keystore "$ANDROID_USER_HOME/debug.keystore" -storepass android -alias AndroidDebugKey | grep -E 'SHA1:|SHA256:'
+          keytool -list -v -keystore "$ANDROID_USER_HOME/debug.keystore" -storepass android -alias androiddebugkey | grep -E 'SHA1:|SHA256:'
           echo "::warning title=Assinatura temporária::Use o SHA-1 e o APK desta mesma execução para o teste OAuth. A chave muda em uma nova execução até configurarmos uma assinatura persistente."
       - name: Instalar pacotes
         working-directory: novelplay_v3
@@ -200,7 +200,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          keytool -list -v -keystore "$ANDROID_USER_HOME/debug.keystore" -storepass android -alias AndroidDebugKey | grep -E 'SHA1:|SHA256:'
+          keytool -list -v -keystore "$ANDROID_USER_HOME/debug.keystore" -storepass android -alias androiddebugkey | grep -E 'SHA1:|SHA256:'
       - name: Compilar APK
         working-directory: novelplay_v3
         env:
