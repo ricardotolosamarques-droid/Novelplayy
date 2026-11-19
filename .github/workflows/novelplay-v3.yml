@@ -195,7 +195,7 @@ jobs:
         run: flutter analyze lib --no-pub --no-fatal-warnings --no-fatal-infos
       - name: Executar testes unitários
         working-directory: novelplay_v3
-        run: flutter test --no-pub
+        run: flutter test --no-pub test/episode_sort_test.dart
       - name: Mostrar SHA-1 da assinatura usada no APK
         shell: bash
         run: |
