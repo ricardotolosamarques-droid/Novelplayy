@@ -1,17 +1,19 @@
-# NOVELIX
+# NOVELIX Android
 
-Projeto Android nativo Kotlin/Jetpack Compose, mantido isolado do aplicativo NovelPlay.
+Projeto Android nativo em Kotlin + Jetpack Compose.
 
-## Fonte
-O arquivo `NOVELIX-Android.zip` contém o projeto original completo. O workflow `.github/workflows/build-novelix-apk.yml` extrai esse arquivo em um runner Linux, instala JDK 17, Android SDK 35 e Gradle 8.9 e tenta gerar o APK debug.
+## Build
+O workflow `.github/workflows/build-novelix-apk.yml` compila o APK debug no GitHub Actions quando arquivos em `NOVELIX/**` mudam ou quando executado manualmente.
 
-## Obter o APK
-1. Abra a aba Actions do repositório.
-2. Selecione **Build NOVELIX APK**.
-3. Aguarde a execução terminar.
-4. Em Artifacts, baixe **NOVELIX-debug-apk** e extraia o `app-debug.apk`.
+No GitHub, abra **Actions → Build NOVELIX APK**, selecione a execução concluída e baixe o artifact **NOVELIX-debug-apk**.
 
-## Limitações conhecidas
-- O endpoint de catálogo está como placeholder em `Api.kt`; a interface abre em modo demonstração até configurar um backend HTTPS autorizado.
-- A compilação automatizada não substitui testes de instalação e reprodução em aparelho físico.
-- O projeto respeita as permissões de conteúdo fornecidas pelo backend; não remove bloqueios de assinatura ou entitlement.
+## Configuração necessária antes do uso real
+O endereço em `app/src/main/java/com/codenexus/novelix/Api.kt` é um placeholder: `https://YOUR-AUTHORIZED-API.example/`. Sem configurar uma API própria/autorizada com os endpoints definidos em `NovelixApi`, o app permanece em modo demonstração e o catálogo real, episódios e reprodução não funcionarão.
+
+O app mantém a verificação de autorização do provedor para episódios que exigem assinatura. Não há remoção ou contorno de bloqueios de conteúdo pago no cliente.
+
+## Observações
+- applicationId: `com.codenexus.novelix`
+- minSdk: 24
+- compileSdk/targetSdk: 35
+- O APK debug gerado pelo workflow ainda precisa ser instalado e testado em um aparelho Android.
